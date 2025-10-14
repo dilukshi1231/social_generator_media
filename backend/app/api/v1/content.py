@@ -1,0 +1,306 @@
+from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
+from typing import List, Optional
+from datetime import datetime
+
+from app.database import get_db
+from app.models.user import User
+from app.models.content import Content, ContentStatus
+from app.api.v1.auth import get_current_user
+from app.services.content_generator import ContentGeneratorService
+from pydantic import BaseModel
+
+
+router = APIRouter()
+
+
+# Schemas
+class ContentGenerateRequest(BaseModel):
+    topic: str
+    auto_approve: bool = False
+
+
+class ContentResponse(BaseModel):
+    id: int
+    topic: str
+    facebook_caption: Optional[str]
+    instagram_caption: Optional[str]
+    linkedin_caption: Optional[str]
+    pinterest_caption: Optional[str]
+    twitter_caption: Optional[str]
+    threads_caption: Optional[str]
+    image_prompt: Optional[str]
+    image_url: Optional[str]
+    status: ContentStatus
+    created_at: datetime
+    
+    class Config:
+        from_attributes = True
+
+
+class ContentApprovalRequest(BaseModel):
+    approved: bool
+    feedback: Optional[str] = None
+
+
+@router.post("/generate", response_model=ContentResponse, status_code=status.HTTP_201_CREATED)
+async def generate_content(
+    request: ContentGenerateRequest,
+    background_tasks: BackgroundTasks,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Generate AI content for social media platforms.
+    
+    This endpoint:
+    1. Generates platform-specific captions
+    2. Creates an image prompt
+    3. Generates an AI image
+    4. Saves everything to the database
+    """
+    # Initialize content generator
+    generator = ContentGeneratorService()
+    
+    try:
+        # Generate complete content package
+        content_data = await generator.generate_complete_content(request.topic)
+        
+        # Create content record
+        new_content = Content(
+        user_id=current_user.id,
+            topic=request.topic,
+        facebook_caption=content_data["captions"].get("facebook"),
+        instagram_caption=content_data["captions"].get("instagram"),
+        linkedin_caption=content_data["captions"].get("linkedin"),
+        pinterest_caption=content_data["captions"].get("pinterest"),
+        twitter_caption=content_data["captions"].get("twitter"),
+        threads_caption=content_data["captions"].get("threads"),
+        image_prompt=content_data.get("image_prompt"),
+        image_data=content_data.get("image_base64"),
+        image_url=content_data.get("image_data"),
+        status=ContentStatus.APPROVED if request.auto_approve else ContentStatus.PENDING_APPROVAL,
+        approved_at=datetime.utcnow() if request.auto_approve else None,
+        extra_data={  # Changed from metadata to extra_data
+            "image_mime": content_data.get("image_mime"),
+            "generated_at": datetime.utcnow().isoformat()
+    }
+)
+        db.add(new_content)
+        await db.commit()
+        await db.refresh(new_content)
+        
+        return new_content
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to generate content: {str(e)}"
+        )
+
+
+@router.get("/", response_model=List[ContentResponse])
+async def list_content(
+    skip: int = 0,
+    limit: int = 20,
+    status_filter: Optional[ContentStatus] = None,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """List all content for the current user."""
+    query = select(Content).where(Content.user_id == current_user.id)
+    
+    if status_filter:
+        query = query.where(Content.status == status_filter)
+    
+    query = query.offset(skip).limit(limit).order_by(Content.created_at.desc())
+    
+    result = await db.execute(query)
+    contents = result.scalars().all()
+    
+    return contents
+
+
+@router.get("/{content_id}", response_model=ContentResponse)
+async def get_content(
+    content_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get specific content by ID."""
+    result = await db.execute(
+        select(Content).where(
+            Content.id == content_id,
+            Content.user_id == current_user.id
+        )
+    )
+    content = result.scalar_one_or_none()
+    
+    if not content:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Content not found"
+        )
+    
+    return content
+
+
+@router.post("/{content_id}/approve", response_model=ContentResponse)
+async def approve_content(
+    content_id: int,
+    approval: ContentApprovalRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Approve or reject generated content."""
+    result = await db.execute(
+        select(Content).where(
+            Content.id == content_id,
+            Content.user_id == current_user.id
+        )
+    )
+    content = result.scalar_one_or_none()
+    
+    if not content:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Content not found"
+        )
+    
+    if approval.approved:
+        content.status = ContentStatus.APPROVED
+        content.approved_at = datetime.utcnow()
+        content.approved_by = current_user.id
+    else:
+        content.status = ContentStatus.REJECTED
+        if approval.feedback:
+            metadata = content.metadata or {}
+            metadata["rejection_feedback"] = approval.feedback
+            content.metadata = metadata
+    
+    await db.commit()
+    await db.refresh(content)
+    
+    return content
+
+
+@router.delete("/{content_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_content(
+    content_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Delete content."""
+    result = await db.execute(
+        select(Content).where(
+            Content.id == content_id,
+            Content.user_id == current_user.id
+        )
+    )
+    content = result.scalar_one_or_none()
+    
+    if not content:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Content not found"
+        )
+    
+    await db.delete(content)
+    await db.commit()
+    
+    return None
+
+
+@router.post("/{content_id}/regenerate-image", response_model=ContentResponse)
+async def regenerate_image(
+    content_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Regenerate image for existing content."""
+    result = await db.execute(
+        select(Content).where(
+            Content.id == content_id,
+            Content.user_id == current_user.id
+        )
+    )
+    content = result.scalar_one_or_none()
+    
+    if not content:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Content not found"
+        )
+    
+    # Initialize generator
+    generator = ContentGeneratorService()
+    
+    try:
+        # Regenerate image
+        image_data = await generator.generate_image_from_prompt(content.image_prompt)
+        
+        # Update content
+        content.image_data = image_data.split(',')[1] if image_data and ',' in image_data else None
+        content.image_url = image_data
+        content.status = ContentStatus.PENDING_APPROVAL
+        
+        await db.commit()
+        await db.refresh(content)
+        
+        return content
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to regenerate image: {str(e)}"
+        )
+
+
+@router.post("/{content_id}/regenerate-captions", response_model=ContentResponse)
+async def regenerate_captions(
+    content_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Regenerate captions for existing content."""
+    result = await db.execute(
+        select(Content).where(
+            Content.id == content_id,
+            Content.user_id == current_user.id
+        )
+    )
+    content = result.scalar_one_or_none()
+    
+    if not content:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Content not found"
+        )
+    
+    # Initialize generator
+    generator = ContentGeneratorService()
+    
+    try:
+        # Regenerate captions
+        captions = await generator.generate_platform_captions(content.topic)
+        
+        # Update content
+        content.facebook_caption = captions.get("facebook")
+        content.instagram_caption = captions.get("instagram")
+        content.linkedin_caption = captions.get("linkedin")
+        content.pinterest_caption = captions.get("pinterest")
+        content.twitter_caption = captions.get("twitter")
+        content.threads_caption = captions.get("threads")
+        content.status = ContentStatus.PENDING_APPROVAL
+        
+        await db.commit()
+        await db.refresh(content)
+        
+        return content
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to regenerate captions: {str(e)}"
+        )
