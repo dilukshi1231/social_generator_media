@@ -95,10 +95,12 @@ export default function ContentPreview({
         <CardContent>
           {content.image_url ? (
             <div className="relative w-full aspect-video rounded-lg overflow-hidden bg-gray-100">
-              <img
+              <Image
                 src={content.image_url}
                 alt="Generated content"
-                className="w-full h-full object-cover"
+                fill
+                className="object-cover"
+                unoptimized
               />
             </div>
           ) : (
