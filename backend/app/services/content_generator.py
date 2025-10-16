@@ -133,10 +133,10 @@ Format as JSON with keys: facebook_caption, instagram_caption, linkedin_caption,
 Your task is to generate a perfect image prompt optimized for AI image generation models like DALL-E, Midjourney, or Stable Diffusion.
 
 The prompt should:
-- Be detailed and descriptive
-- Include style, lighting, composition details
+- Be detailed, descriptive and no less than 400 words when describing the scene
+- Include style, lighting, composition details, camera angles, art styles, and any other relevant information
 - Specify colors and mood
-- Be clear and concise
+- Be clear, concise, unabiguous, and avoid repetition
 - Avoid any controversial or sensitive content
 
 Return only the image prompt as plain text."""

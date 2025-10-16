@@ -1,0 +1,147 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+*.pyd
+build/
+dist/
+eggs/
+*.egg-info/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+pip-wheel-metadata/
+share/python-wheels/
+.Python
+env/
+venv/
+ENV/
+.env
+env.bak/
+venv.bak/
+backend/.venv/
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage reports
+.tox/
+*.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*,cover
+.hypothesis/
+.pytest_cache/
+
+# pyenv
+.python-version
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# C extensions
+*.so
+
+# FastAPI / Uvicorn
+*.log
+
+# SQLAlchemy
+*.db
+
+# VS Code
+.vscode/
+.history/
+
+# JetBrains
+.idea/
+*.iml
+
+# OS files
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Icon?
+Desktop.ini
+
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+package-lock.json
+# If you commit lockfiles, remove the lines above
+# yarn.lock
+# pnpm-lock.yaml
+
+# Next.js
+.next/
+.vercel/
+.turbo/
+out/
+dist/
+/.cache/
+
+# Next.js build trace files
+.next/build-manifest.json
+.next/prerender-manifest.json
+.next/routes-manifest.json
+.next/server/pages-manifest.json
+
+# Environment
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Public uploads / generated
+uploads/
+media/
+
+# Docker
+.dockerignore
+docker-compose.override.yml
+docker-compose.*.yml
+**/docker-compose.override.yml
+
+# Logs
+*.log
+logs/
+
+# macOS
+*.DS_Store
+
+# Windows
+Thumbs.db
+
+# Python compiled packages
+*.egg
+*.egg-info
+
+# Backend migrations (if you want to keep them in repo, remove these lines)
+# alembic/versions/
+
+# Temporary files
+*.swp
+*~
+.project
+
+# IDE-specific
+*.sublime-workspace
+*.sublime-project
+
+# Yarn v2/v3 Plug'n'Play
+.pnp.cjs
+.pnp.js
+
+# Logs and debug
+.sourcemaps
