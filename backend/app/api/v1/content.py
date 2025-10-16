@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, update
 from typing import List, Optional
 from datetime import datetime
 
@@ -34,6 +34,7 @@ class ContentResponse(BaseModel):
     threads_caption: Optional[str]
     image_prompt: Optional[str]
     image_url: Optional[str]
+    extra_data: Optional[dict]
     status: ContentStatus
     created_at: datetime
 
@@ -216,13 +217,16 @@ async def approve_content(
     else:
         content.status = ContentStatus.REJECTED
         if approval.feedback:
-            # Use the JSON `extra_data` column safely (was previously `metadata`)
+            # Build a safe JSON dict for extra_data and persist via a direct UPDATE
             extra = content.extra_data or {}
-            # Ensure we have a dict to modify
             if not isinstance(extra, dict):
                 extra = {}
             extra["rejection_feedback"] = approval.feedback
-            content.extra_data = extra
+
+            # Use an explicit UPDATE statement to ensure JSON is persisted
+            await db.execute(
+                update(Content).where(Content.id == content_id).values(extra_data=extra)
+            )
 
     await db.commit()
     await db.refresh(content)

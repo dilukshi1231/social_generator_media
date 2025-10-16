@@ -34,7 +34,7 @@ class ContentGeneratorService:
         prompt = f"""Topic: {topic}
 
 Based on this topic, generate perfect and platform-specific captions for social media. 
-Don't use (*) star symbols in the output.
+Don't use (*) star symbols in the output. All the captions must be in English
 
 Generate:
 1. Facebook Caption - Engaging caption with proper hashtags (can be longer, storytelling)

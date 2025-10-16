@@ -1,6 +1,7 @@
 from pydantic_settings import BaseSettings
 from typing import List
 from functools import lru_cache
+from pydantic import ConfigDict
 
 
 class Settings(BaseSettings):
@@ -66,9 +67,13 @@ class Settings(BaseSettings):
     def cors_origins_list(self) -> List[str]:
         return [origin.strip() for origin in self.CORS_ORIGINS.split(",")]
 
-    class Config:
-        env_file = ".env"
-        case_sensitive = True
+    # Pydantic v2 style configuration
+    model_config: ConfigDict = ConfigDict(
+        {
+            "env_file": ".env",
+            "case_sensitive": True,
+        }
+    )
 
 
 @lru_cache()
