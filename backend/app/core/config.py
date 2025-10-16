@@ -2,6 +2,7 @@ from pydantic_settings import BaseSettings
 from typing import List
 from functools import lru_cache
 
+
 class Settings(BaseSettings):
     # Application
     APP_NAME: str = "Social Media Automation"
@@ -36,6 +37,7 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: str = ""
     ANTHROPIC_API_KEY: str = ""
     REPLICATE_API_TOKEN: str = ""
+    GEMINI_API_KEY: str = ""  # Google Gemini API key
 
     # Social Media
     TWITTER_API_KEY: str = ""
@@ -68,8 +70,10 @@ class Settings(BaseSettings):
         env_file = ".env"
         case_sensitive = True
 
+
 @lru_cache()
 def get_settings() -> Settings:
     return Settings()
+
 
 settings = get_settings()

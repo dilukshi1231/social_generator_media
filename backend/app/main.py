@@ -7,7 +7,8 @@ from app.database import create_tables
 from loguru import logger
 
 # Import routers - only import what exists and isn't commented out
-from app.api.v1 import auth
+from app.api.v1 import auth, content
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -18,11 +19,12 @@ async def lifespan(app: FastAPI):
     if settings.DEBUG:
         logger.info("Creating database tables...")
         await create_tables()
-    
+
     yield
-    
+
     # Shutdown
     logger.info("Shutting down application...")
+
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -44,6 +46,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
 # Health check endpoint
 @app.get("/")
 async def root():
@@ -51,28 +54,28 @@ async def root():
     return {
         "message": "Social Media Automation API",
         "version": settings.APP_VERSION,
-        "status": "running"
+        "status": "running",
     }
+
 
 @app.get("/health")
 async def health_check():
     """Health check endpoint."""
-    return {
-        "status": "healthy",
-        "version": settings.APP_VERSION
-    }
+    return {"status": "healthy", "version": settings.APP_VERSION}
 
-# Include routers - only auth for now
+
+# Include routers
 app.include_router(auth.router, prefix="/api/v1/auth", tags=["Authentication"])
+app.include_router(content.router, prefix="/api/v1/content", tags=["Content"])
 
 # Uncomment these as you implement the services they depend on:
-# from app.api.v1 import social_account, content, posts
+# from app.api.v1 import social_account, posts
 # app.include_router(social_account.router, prefix="/api/v1/social-accounts", tags=["Social Accounts"])
-# app.include_router(content.router, prefix="/api/v1/content", tags=["Content"])
 # app.include_router(posts.router, prefix="/api/v1/posts", tags=["Posts"])
 
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run(
         "app.main:app",
         host=settings.HOST,
