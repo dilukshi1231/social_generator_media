@@ -23,6 +23,57 @@ export default function CreateContentPage() {
     console.log('🚀 CreateContentPage component mounted');
   }, []);
 
+  const generateImage = async (prompt: string): Promise<string> => {
+    console.log('[Image] Generating image with prompt:', prompt);
+
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+    const proxyUrl = `${apiUrl}/api/v1/content/generate-image-proxy`;
+
+    try {
+      // Get auth token from localStorage - correct key is 'access_token'
+      const token = localStorage.getItem('access_token');
+
+      if (!token) {
+        console.error('[Image] No access token found in localStorage');
+        throw new Error('Authentication required. Please log in again.');
+      }
+
+      console.log('[Image] Calling backend proxy:', proxyUrl);
+      console.log('[Image] Token found:', token ? 'Yes' : 'No');
+
+      const response = await fetch(proxyUrl, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ prompt }),
+      });
+
+      console.log('[Image] Response status:', response.status);
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Image generation failed: ${errorText}`);
+      }
+
+      // Parse JSON response with image_url and file_path
+      const data = await response.json();
+      console.log('[Image] Response data:', data);
+
+      // Construct full URL for the saved image
+      const imageUrl = `${apiUrl}${data.image_url}`;
+
+      console.log('[Image] Image saved to:', data.file_path);
+      console.log('[Image] Image URL:', imageUrl);
+
+      return imageUrl;
+    } catch (error) {
+      console.error('[Image] Error generating image:', error);
+      throw error;
+    }
+  };
+
   const handleGenerate = async () => {
     console.log('=== handleGenerate CALLED ===');
     console.log('Topic:', topic);
@@ -39,6 +90,7 @@ export default function CreateContentPage() {
     setIsGenerating(true);
 
     try {
+      // Step 1: Get content from n8n webhook
       const webhookUrl = 'http://localhost:5678/webhook-test/viraldata';
       const requestBody = {
         Topic: topic.trim(),
@@ -83,7 +135,20 @@ export default function CreateContentPage() {
         console.log('[Webhook] Using data directly (no .text wrapper)');
       }
 
-      // Create Content object from webhook response
+      // Step 2: Generate image using the prompt from webhook
+      let imageUrl: string | undefined;
+      if (parsedData.prompt) {
+        console.log('[Image] Starting image generation...');
+        try {
+          imageUrl = await generateImage(parsedData.prompt);
+          console.log('[Image] Image URL created:', imageUrl);
+        } catch (imageError) {
+          console.error('[Image] Image generation failed, continuing without image:', imageError);
+          // Continue without image - don't fail the whole process
+        }
+      }
+
+      // Step 3: Create Content object from webhook response
       const content: Content = {
         id: 0, // Temporary ID since webhook doesn't provide one
         topic: topic.trim(),
@@ -94,7 +159,7 @@ export default function CreateContentPage() {
         threads_caption: parsedData.threads_caption || '',
         pinterest_caption: parsedData.pinterest_caption || '',
         image_prompt: parsedData.prompt || '',
-        image_url: undefined,
+        image_url: imageUrl,
         status: 'pending_approval',
         created_at: new Date().toISOString(),
       };
@@ -105,7 +170,9 @@ export default function CreateContentPage() {
 
       toast({
         title: 'Content generated!',
-        description: 'Review your AI-generated content below',
+        description: imageUrl
+          ? 'Review your AI-generated content and image below'
+          : 'Review your AI-generated content below (image generation failed)',
       });
     } catch (error: unknown) {
       console.error('[Webhook] Error:', error);
@@ -136,12 +203,42 @@ export default function CreateContentPage() {
   const handleApprove = async () => {
     if (!generatedContent) return;
 
-    toast({
-      title: 'Content approved!',
-      description: 'You can now publish this content',
-    });
+    try {
+      console.log('[Approve] Saving content to database...', generatedContent);
 
-    router.push('/dashboard/content');
+      // Import the contentAPI
+      const { contentAPI } = await import('@/lib/api');
+
+      // Save content to database with auto_approve=true
+      const response = await contentAPI.create({
+        topic: generatedContent.topic,
+        facebook_caption: generatedContent.facebook_caption,
+        instagram_caption: generatedContent.instagram_caption,
+        linkedin_caption: generatedContent.linkedin_caption,
+        pinterest_caption: generatedContent.pinterest_caption,
+        twitter_caption: generatedContent.twitter_caption,
+        threads_caption: generatedContent.threads_caption,
+        image_prompt: generatedContent.image_prompt,
+        image_url: generatedContent.image_url,
+        auto_approve: true,
+      });
+
+      console.log('[Approve] Content saved successfully:', response.data);
+
+      toast({
+        title: 'Content approved and saved!',
+        description: 'Your content has been saved to the database',
+      });
+
+      router.push('/dashboard/content');
+    } catch (error) {
+      console.error('[Approve] Error saving content:', error);
+      toast({
+        title: 'Failed to save content',
+        description: 'Please try again',
+        variant: 'destructive',
+      });
+    }
   };
 
   const handleReject = async () => {

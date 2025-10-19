@@ -17,7 +17,7 @@ api.interceptors.request.use(
     if (config.url?.includes('/auth/login') || config.url?.includes('/auth/register')) {
       return config;
     }
-    
+
     const token = localStorage.getItem('access_token');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
@@ -41,11 +41,11 @@ api.interceptors.response.use(
 
       try {
         const refreshToken = localStorage.getItem('refresh_token');
-        
+
         if (!refreshToken) {
           throw new Error('No refresh token');
         }
-        
+
         // Create a new axios instance to avoid interceptor loops
         const refreshResponse = await axios.post(
           `${API_URL}/api/v1/auth/refresh`,
@@ -59,7 +59,7 @@ api.interceptors.response.use(
         );
 
         const { access_token, refresh_token } = refreshResponse.data;
-        
+
         localStorage.setItem('access_token', access_token);
         localStorage.setItem('refresh_token', refresh_token);
 
@@ -68,16 +68,16 @@ api.interceptors.response.use(
         return api(originalRequest);
       } catch (refreshError: any) {
         console.error('Token refresh failed:', refreshError.response?.data);
-        
+
         // Refresh failed, clear tokens and redirect
         localStorage.removeItem('access_token');
         localStorage.removeItem('refresh_token');
-        
+
         // Only redirect if we're not already on the login page
         if (typeof window !== 'undefined' && !window.location.pathname.includes('/login')) {
           window.location.href = '/login';
         }
-        
+
         return Promise.reject(refreshError);
       }
     }
@@ -100,7 +100,7 @@ export const authAPI = {
     const formData = new URLSearchParams();
     formData.append('username', data.username);
     formData.append('password', data.password);
-    
+
     return api.post('/api/v1/auth/login', formData, {
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     });
@@ -115,6 +115,19 @@ export const authAPI = {
 export const contentAPI = {
   generate: (data: { topic: string; auto_approve?: boolean }) =>
     api.post('/api/v1/content/generate', data),
+
+  create: (data: {
+    topic: string;
+    facebook_caption?: string;
+    instagram_caption?: string;
+    linkedin_caption?: string;
+    pinterest_caption?: string;
+    twitter_caption?: string;
+    threads_caption?: string;
+    image_prompt?: string;
+    image_url?: string;
+    auto_approve?: boolean;
+  }) => api.post('/api/v1/content/create', data),
 
   list: (params?: { skip?: number; limit?: number; status_filter?: string }) =>
     api.get('/api/v1/content/', { params }),

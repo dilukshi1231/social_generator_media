@@ -1,6 +1,8 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from app.core.config import settings
 from app.database import create_tables
@@ -19,6 +21,11 @@ async def lifespan(app: FastAPI):
     if settings.DEBUG:
         logger.info("Creating database tables...")
         await create_tables()
+
+    # Create uploads directory if it doesn't exist
+    upload_dir = Path("uploads/images")
+    upload_dir.mkdir(parents=True, exist_ok=True)
+    logger.info(f"Uploads directory ready: {upload_dir.absolute()}")
 
     yield
 
@@ -67,6 +74,9 @@ async def health_check():
 # Include routers
 app.include_router(auth.router, prefix="/api/v1/auth", tags=["Authentication"])
 app.include_router(content.router, prefix="/api/v1/content", tags=["Content"])
+
+# Mount static files for serving uploaded images
+app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
 # Uncomment these as you implement the services they depend on:
 # from app.api.v1 import social_account, posts
