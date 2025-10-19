@@ -7,8 +7,9 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { contentAPI } from '@/lib/api';
 import { useToast } from '@/components/ui/use-toast';
-import { Plus, Eye, Trash2, RefreshCw } from 'lucide-react';
+import { Plus, Eye, Trash2, RefreshCw, Send } from 'lucide-react';
 import type { Content } from '@/types';
+import PublishDialog from '@/components/content/publish-dialog';
 
 export default function ContentPage() {
   const router = useRouter();
@@ -16,6 +17,8 @@ export default function ContentPage() {
   const [contents, setContents] = useState<Content[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [filter, setFilter] = useState<string>('all');
+  const [selectedContent, setSelectedContent] = useState<Content | null>(null);
+  const [publishDialogOpen, setPublishDialogOpen] = useState(false);
 
   useEffect(() => {
     fetchContents();
@@ -55,6 +58,11 @@ export default function ContentPage() {
         variant: 'destructive',
       });
     }
+  };
+
+  const handlePublish = (content: Content) => {
+    setSelectedContent(content);
+    setPublishDialogOpen(true);
   };
 
   const getStatusColor = (status: string) => {
@@ -147,6 +155,16 @@ export default function ContentPage() {
                     <Eye className="mr-2 h-4 w-4" />
                     View
                   </Button>
+                  {content.status === 'approved' && (
+                    <Button
+                      size="sm"
+                      className="flex-1"
+                      onClick={() => handlePublish(content)}
+                    >
+                      <Send className="mr-2 h-4 w-4" />
+                      Publish
+                    </Button>
+                  )}
                   <Button
                     variant="ghost"
                     size="sm"
@@ -159,6 +177,15 @@ export default function ContentPage() {
             </Card>
           ))}
         </div>
+      )}
+
+      {/* Publish Dialog */}
+      {selectedContent && (
+        <PublishDialog
+          open={publishDialogOpen}
+          onOpenChange={setPublishDialogOpen}
+          content={selectedContent}
+        />
       )}
     </div>
   );

@@ -1,12 +1,14 @@
 'use client';
 
+import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
-import { Check, X, RefreshCw, Facebook, Instagram, Linkedin, Twitter, Image as ImageIcon } from 'lucide-react';
+import { Check, X, RefreshCw, Facebook, Instagram, Linkedin, Twitter, Image as ImageIcon, Send, Clock } from 'lucide-react';
 import type { Content } from '@/types';
 import Image from 'next/image';
+import PublishDialog from '@/components/content/publish-dialog';
 
 interface ContentPreviewProps {
   content: Content;
@@ -25,6 +27,8 @@ export default function ContentPreview({
   onRegenerateImage,
   isLoading = false,
 }: ContentPreviewProps) {
+  const [publishDialogOpen, setPublishDialogOpen] = useState(false);
+
   const platforms = [
     {
       name: 'Facebook',
@@ -57,6 +61,11 @@ export default function ContentPreview({
       color: 'text-gray-900',
     },
   ];
+
+  const handleApproveAndPublish = async () => {
+    await onApprove();
+    setPublishDialogOpen(true);
+  };
 
   return (
     <div className="space-y-6">
@@ -171,13 +180,13 @@ export default function ContentPreview({
           <CardContent className="pt-6">
             <div className="flex gap-4">
               <Button
-                onClick={onApprove}
+                onClick={handleApproveAndPublish}
                 size="lg"
                 className="flex-1 bg-green-600 hover:bg-green-700"
                 disabled={isLoading}
               >
                 <Check className="mr-2 h-5 w-5" />
-                Approve Content
+                Approve & Publish
               </Button>
               <Button
                 onClick={onReject}
@@ -196,6 +205,42 @@ export default function ContentPreview({
           </CardContent>
         </Card>
       )}
+
+      {/* Approved Content Actions */}
+      {content.status === 'approved' && (
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex gap-4">
+              <Button
+                onClick={() => setPublishDialogOpen(true)}
+                size="lg"
+                className="flex-1"
+                disabled={isLoading}
+              >
+                <Send className="mr-2 h-5 w-5" />
+                Publish Now
+              </Button>
+              <Button
+                onClick={() => setPublishDialogOpen(true)}
+                size="lg"
+                variant="outline"
+                className="flex-1"
+                disabled={isLoading}
+              >
+                <Clock className="mr-2 h-5 w-5" />
+                Schedule Post
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Publish Dialog */}
+      <PublishDialog
+        open={publishDialogOpen}
+        onOpenChange={setPublishDialogOpen}
+        content={content}
+      />
     </div>
   );
 }

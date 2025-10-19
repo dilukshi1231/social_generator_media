@@ -15,8 +15,8 @@ import {
 
 const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-  { name: 'Content', href: '/dashboard/content/create', icon: FileText },
-  { name: 'Posts', href: '/dashboard/posts/page', icon: Send },
+  { name: 'Content', href: '/dashboard/content', icon: FileText },
+  { name: 'Posts', href: '/dashboard/posts', icon: Send },
   { name: 'Social Accounts', href: '/dashboard/social-accounts', icon: Link2 },
   { name: 'Analytics', href: '/dashboard/analytics', icon: BarChart3 },
   { name: 'Settings', href: '/dashboard/settings', icon: Settings },

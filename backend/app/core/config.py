@@ -33,18 +33,21 @@ class Settings(BaseSettings):
     GOOGLE_CLIENT_SECRET: str = ""
     FACEBOOK_APP_ID: str = ""
     FACEBOOK_APP_SECRET: str = ""
+    FACEBOOK_REDIRECT_URI: str = ""  # ADD THIS
+    FRONTEND_URL: str = ""  # ADD THIS
 
     # AI Services
     OPENAI_API_KEY: str = ""
     ANTHROPIC_API_KEY: str = ""
     REPLICATE_API_TOKEN: str = ""
-    GEMINI_API_KEY: str = ""  # Google Gemini API key
+    GEMINI_API_KEY: str = ""
+    GOOGLE_API_KEY: str = ""  # ADD THIS (alias for GEMINI)
 
     # Social Media
     TWITTER_API_KEY: str = ""
     TWITTER_API_SECRET: str = ""
-    TWITTER_ACCESS_TOKEN: str = ""  # Added this
-    TWITTER_ACCESS_SECRET: str = ""  # Added this
+    TWITTER_ACCESS_TOKEN: str = ""
+    TWITTER_ACCESS_SECRET: str = ""
     INSTAGRAM_USERNAME: str = ""
     INSTAGRAM_PASSWORD: str = ""
     LINKEDIN_CLIENT_ID: str = ""
@@ -67,11 +70,11 @@ class Settings(BaseSettings):
     def cors_origins_list(self) -> List[str]:
         return [origin.strip() for origin in self.CORS_ORIGINS.split(",")]
 
-    # Pydantic v2 style configuration
     model_config: ConfigDict = ConfigDict(
         {
             "env_file": ".env",
             "case_sensitive": True,
+            "extra": "ignore",  # ADD THIS to ignore extra fields
         }
     )
 
