@@ -1,13 +1,12 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/components/ui/use-toast';
-import { contentAPI } from '@/lib/api';
 import { Loader2, Sparkles, ArrowLeft } from 'lucide-react';
 import ContentPreview from '@/components/content/content-preview';
 import type { Content } from '@/types';
@@ -15,12 +14,19 @@ import type { Content } from '@/types';
 export default function CreateContentPage() {
   const router = useRouter();
   const { toast } = useToast();
-  
+
   const [topic, setTopic] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatedContent, setGeneratedContent] = useState<Content | null>(null);
 
+  useEffect(() => {
+    console.log('🚀 CreateContentPage component mounted');
+  }, []);
+
   const handleGenerate = async () => {
+    console.log('=== handleGenerate CALLED ===');
+    console.log('Topic:', topic);
+
     if (!topic.trim()) {
       toast({
         title: 'Topic required',
@@ -33,23 +39,95 @@ export default function CreateContentPage() {
     setIsGenerating(true);
 
     try {
-      const response = await contentAPI.generate({
-        topic: topic.trim(),
-        auto_approve: false,
+      const webhookUrl = 'http://localhost:5678/webhook-test/viraldata';
+      const requestBody = {
+        Topic: topic.trim(),
+        Intention: "Image generation"
+      };
+
+      console.log('[Webhook] Sending request to:', webhookUrl);
+      console.log('[Webhook] Request body:', requestBody);
+
+      const response = await fetch(webhookUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(requestBody),
       });
 
-      setGeneratedContent(response.data);
+      console.log('[Webhook] Response status:', response.status);
+      console.log('[Webhook] Response headers:', Object.fromEntries(response.headers.entries()));
+
+      if (!response.ok) {
+        throw new Error(`Webhook returned ${response.status}`);
+      }
+
+      const data = await response.json();
+      console.log('[Webhook] Raw response data:', data);
+
+      // Parse the markdown-wrapped JSON
+      let parsedData;
+      if (data.text) {
+        console.log('[Webhook] Response has .text property, attempting to parse...');
+        const jsonMatch = data.text.match(/```json\n([\s\S]*?)\n```/);
+        if (jsonMatch) {
+          parsedData = JSON.parse(jsonMatch[1]);
+          console.log('[Webhook] Parsed JSON from markdown:', parsedData);
+        } else {
+          console.error('[Webhook] Could not extract JSON from markdown');
+          throw new Error('Invalid response format from webhook');
+        }
+      } else {
+        parsedData = data;
+        console.log('[Webhook] Using data directly (no .text wrapper)');
+      }
+
+      // Create Content object from webhook response
+      const content: Content = {
+        id: 0, // Temporary ID since webhook doesn't provide one
+        topic: topic.trim(),
+        facebook_caption: parsedData.facebook_caption || '',
+        instagram_caption: parsedData.instagram_caption || '',
+        linkedin_caption: parsedData.linkedin_caption || '',
+        twitter_caption: parsedData.x_tweet || '', // Map x_tweet to twitter_caption
+        threads_caption: parsedData.threads_caption || '',
+        pinterest_caption: parsedData.pinterest_caption || '',
+        image_prompt: parsedData.prompt || '',
+        image_url: undefined,
+        status: 'pending_approval',
+        created_at: new Date().toISOString(),
+      };
+
+      console.log('[Webhook] Created Content object:', content);
+
+      setGeneratedContent(content);
 
       toast({
         title: 'Content generated!',
         description: 'Review your AI-generated content below',
       });
-    } catch (error: any) {
-      toast({
-        title: 'Generation failed',
-        description: error.response?.data?.detail || 'Failed to generate content',
-        variant: 'destructive',
-      });
+    } catch (error: unknown) {
+      console.error('[Webhook] Error:', error);
+
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      const errorName = error instanceof Error ? error.name : '';
+
+      // Check if it's a CORS error
+      if (errorMessage.includes('Failed to fetch') || errorName === 'TypeError') {
+        console.error('[Webhook] Possible CORS error - check n8n webhook settings');
+        toast({
+          title: 'Connection failed',
+          description: 'Could not connect to content generation service. Check console for details.',
+          variant: 'destructive',
+        });
+      } else {
+        toast({
+          title: 'Generation failed',
+          description: errorMessage || 'Failed to generate content',
+          variant: 'destructive',
+        });
+      }
     } finally {
       setIsGenerating(false);
     }
@@ -58,93 +136,38 @@ export default function CreateContentPage() {
   const handleApprove = async () => {
     if (!generatedContent) return;
 
-    try {
-      await contentAPI.approve(generatedContent.id, { approved: true });
+    toast({
+      title: 'Content approved!',
+      description: 'You can now publish this content',
+    });
 
-      toast({
-        title: 'Content approved!',
-        description: 'You can now publish this content',
-      });
-
-      router.push('/dashboard/content');
-    } catch (error: any) {
-      toast({
-        title: 'Approval failed',
-        description: error.response?.data?.detail || 'Failed to approve content',
-        variant: 'destructive',
-      });
-    }
+    router.push('/dashboard/content');
   };
 
   const handleReject = async () => {
     if (!generatedContent) return;
 
-    try {
-      await contentAPI.approve(generatedContent.id, {
-        approved: false,
-        feedback: 'User rejected',
-      });
+    toast({
+      title: 'Content rejected',
+      description: 'Generate new content or try a different topic',
+    });
 
-      toast({
-        title: 'Content rejected',
-        description: 'Generate new content or try a different topic',
-      });
-
-      setGeneratedContent(null);
-      setTopic('');
-    } catch (error: any) {
-      toast({
-        title: 'Rejection failed',
-        description: error.response?.data?.detail || 'Failed to reject content',
-        variant: 'destructive',
-      });
-    }
+    setGeneratedContent(null);
+    setTopic('');
   };
 
   const handleRegenerateCaptions = async () => {
     if (!generatedContent) return;
 
-    setIsGenerating(true);
-    try {
-      const response = await contentAPI.regenerateCaptions(generatedContent.id);
-      setGeneratedContent(response.data);
-
-      toast({
-        title: 'Captions regenerated!',
-        description: 'Review the new captions below',
-      });
-    } catch (error: any) {
-      toast({
-        title: 'Regeneration failed',
-        description: error.response?.data?.detail || 'Failed to regenerate captions',
-        variant: 'destructive',
-      });
-    } finally {
-      setIsGenerating(false);
-    }
+    // Call webhook again with the same topic
+    await handleGenerate();
   };
 
   const handleRegenerateImage = async () => {
     if (!generatedContent) return;
 
-    setIsGenerating(true);
-    try {
-      const response = await contentAPI.regenerateImage(generatedContent.id);
-      setGeneratedContent(response.data);
-
-      toast({
-        title: 'Image regenerated!',
-        description: 'Review the new image below',
-      });
-    } catch (error: any) {
-      toast({
-        title: 'Regeneration failed',
-        description: error.response?.data?.detail || 'Failed to regenerate image',
-        variant: 'destructive',
-      });
-    } finally {
-      setIsGenerating(false);
-    }
+    // Call webhook again with the same topic
+    await handleGenerate();
   };
 
   return (
@@ -210,7 +233,7 @@ export default function CreateContentPage() {
                 ) : (
                   <>
                     <Sparkles className="mr-2 h-5 w-5" />
-                    Generate Content
+                    Generate Content Yo
                   </>
                 )}
               </Button>
@@ -222,7 +245,7 @@ export default function CreateContentPage() {
                   AI is working its magic... ✨
                 </p>
                 <p className="text-sm text-indigo-700 mt-1">
-                  This may take 30-60 seconds. We're generating:
+                  This may take 30-60 seconds. We&apos;re generating:
                 </p>
                 <ul className="text-sm text-indigo-700 mt-2 space-y-1 list-disc list-inside">
                   <li>Platform-specific captions (Facebook, Instagram, LinkedIn, Twitter, Threads)</li>
