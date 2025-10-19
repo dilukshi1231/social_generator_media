@@ -1,1 +1,0 @@
-curl.exe -X POST "https://rapid-cherry-82e1.tharindukasthurisinghe.workers.dev" -H "Authorization: Bearer 8704cf55-470b-40fb-8ad8-a5afa16f2a51" -H "Content-Type: application/json" -d '{\"prompt\": \"A cute robot cooking breakfast\"}' -o image.jpg
