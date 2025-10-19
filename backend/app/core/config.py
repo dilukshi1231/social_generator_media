@@ -40,6 +40,10 @@ class Settings(BaseSettings):
     REPLICATE_API_TOKEN: str = ""
     GEMINI_API_KEY: str = ""  # Google Gemini API key
 
+    # Cloudflare Worker for Image Generation
+    CLOUDEFARE_WORKER_URL: str = ""
+    CLOUDEFARE_WORKER_AUTH_TOKEN: str = ""
+
     # Social Media
     TWITTER_API_KEY: str = ""
     TWITTER_API_SECRET: str = ""

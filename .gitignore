@@ -105,7 +105,9 @@ dist/
 
 # Public uploads / generated
 uploads/
+!uploads/.gitkeep
 media/
+frontend/public/generated-images/
 
 # Docker
 .dockerignore

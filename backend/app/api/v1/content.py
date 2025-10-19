@@ -109,6 +109,69 @@ async def generate_content(
         )
 
 
+class ContentCreateRequest(BaseModel):
+    topic: str
+    facebook_caption: Optional[str] = None
+    instagram_caption: Optional[str] = None
+    linkedin_caption: Optional[str] = None
+    pinterest_caption: Optional[str] = None
+    twitter_caption: Optional[str] = None
+    threads_caption: Optional[str] = None
+    image_prompt: Optional[str] = None
+    image_url: Optional[str] = None
+    auto_approve: bool = False
+
+
+@router.post(
+    "/create", response_model=ContentResponse, status_code=status.HTTP_201_CREATED
+)
+async def create_content(
+    request: ContentCreateRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Create and save content that was generated via webhook (n8n).
+    This endpoint saves content without generating it.
+    """
+    try:
+        # Create content record
+        new_content = Content(
+            user_id=current_user.id,
+            topic=request.topic,
+            facebook_caption=request.facebook_caption,
+            instagram_caption=request.instagram_caption,
+            linkedin_caption=request.linkedin_caption,
+            pinterest_caption=request.pinterest_caption,
+            twitter_caption=request.twitter_caption,
+            threads_caption=request.threads_caption,
+            image_prompt=request.image_prompt,
+            image_url=request.image_url,
+            status=(
+                ContentStatus.APPROVED
+                if request.auto_approve
+                else ContentStatus.PENDING_APPROVAL
+            ),
+            approved_at=datetime.utcnow() if request.auto_approve else None,
+            extra_data={
+                "source": "webhook",
+                "created_at": datetime.utcnow().isoformat(),
+            },
+        )
+        db.add(new_content)
+        await db.commit()
+        await db.refresh(new_content)
+
+        return new_content
+
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to create content: {str(e)}",
+        )
+
+
 @router.get("/", response_model=List[ContentResponse])
 async def list_content(
     skip: int = 0,
@@ -370,4 +433,86 @@ async def regenerate_captions(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to regenerate captions: {str(e)}",
+        )
+
+
+class ImageGenerateRequest(BaseModel):
+    prompt: str
+
+
+class ImageGenerateResponse(BaseModel):
+    image_url: str
+    file_path: str
+
+
+@router.post("/generate-image-proxy", response_model=ImageGenerateResponse)
+async def generate_image_proxy(
+    request: ImageGenerateRequest,
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Proxy endpoint to generate images using Cloudflare Worker.
+    This avoids CORS issues by making the request from the backend.
+    Saves the image to disk and returns the file path.
+    """
+    import httpx
+    import os
+    from datetime import datetime
+    from pathlib import Path
+    import uuid
+
+    cloudflare_url = os.getenv(
+        "CLOUDEFARE_WORKER_URL",
+        "https://rapid-cherry-82e1.tharindukasthurisinghe.workers.dev",
+    )
+    auth_token = os.getenv(
+        "CLOUDEFARE_WORKER_AUTH_TOKEN", "8704cf55-470b-40fb-8ad8-a5afa16f2a51"
+    )
+
+    try:
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            response = await client.post(
+                cloudflare_url,
+                headers={
+                    "Authorization": f"Bearer {auth_token}",
+                    "Content-Type": "application/json",
+                },
+                json={"prompt": request.prompt},
+            )
+
+            if response.status_code != 200:
+                raise HTTPException(
+                    status_code=response.status_code,
+                    detail=f"Image generation failed: {response.text}",
+                )
+
+            # Create uploads directory if it doesn't exist
+            upload_dir = Path("uploads/images")
+            upload_dir.mkdir(parents=True, exist_ok=True)
+
+            # Generate unique filename
+            timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+            unique_id = str(uuid.uuid4())[:8]
+            filename = f"{timestamp}_{current_user.id}_{unique_id}.jpg"
+            file_path = upload_dir / filename
+
+            # Save image to disk
+            with open(file_path, "wb") as f:
+                f.write(response.content)
+
+            # Return relative path for database storage
+            relative_path = f"uploads/images/{filename}"
+            image_url = f"/uploads/images/{filename}"
+
+            return ImageGenerateResponse(image_url=image_url, file_path=relative_path)
+
+    except httpx.TimeoutException:
+        raise HTTPException(
+            status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+            detail="Image generation timed out",
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to generate image: {str(e)}",
         )
