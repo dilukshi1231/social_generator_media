@@ -6,8 +6,8 @@ from app.core.config import settings
 from app.database import create_tables
 from loguru import logger
 
-# Import routers - only import what exists and isn't commented out
-from app.api.v1 import auth, content
+# Import routers
+from app.api.v1 import auth, content, social_accounts, posts  # ADD social_accounts and posts
 
 
 @asynccontextmanager
@@ -67,11 +67,9 @@ async def health_check():
 # Include routers
 app.include_router(auth.router, prefix="/api/v1/auth", tags=["Authentication"])
 app.include_router(content.router, prefix="/api/v1/content", tags=["Content"])
+app.include_router(social_accounts.router, prefix="/api/v1/social-accounts", tags=["Social Accounts"])  # ADD THIS
+app.include_router(posts.router, prefix="/api/v1/posts", tags=["Posts"])  # ADD THIS
 
-# Uncomment these as you implement the services they depend on:
-# from app.api.v1 import social_account, posts
-# app.include_router(social_account.router, prefix="/api/v1/social-accounts", tags=["Social Accounts"])
-# app.include_router(posts.router, prefix="/api/v1/posts", tags=["Posts"])
 
 if __name__ == "__main__":
     import uvicorn
