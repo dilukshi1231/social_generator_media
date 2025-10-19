@@ -33,7 +33,7 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => response,
   async (error: AxiosError) => {
-    const originalRequest = error.config as any;
+    const originalRequest = error.config as (typeof error.config & { _retry?: boolean });
 
     // If token expired, try to refresh
     if (error.response?.status === 401 && !originalRequest._retry) {
@@ -66,8 +66,9 @@ api.interceptors.response.use(
         // Update the failed request with new token
         originalRequest.headers.Authorization = `Bearer ${access_token}`;
         return api(originalRequest);
-      } catch (refreshError: any) {
-        console.error('Token refresh failed:', refreshError.response?.data);
+      } catch (refreshError: unknown) {
+        const errorData = refreshError instanceof Error ? refreshError.message : 'Unknown error';
+        console.error('Token refresh failed:', errorData);
 
         // Refresh failed, clear tokens and redirect
         localStorage.removeItem('access_token');
@@ -155,7 +156,7 @@ export const socialAccountsAPI = {
     refresh_token?: string;
     platform_user_id?: string;
     display_name?: string;
-    platform_data?: any;
+    platform_data?: Record<string, unknown>;
   }) => api.post('/api/v1/social-accounts/', data),
 
   list: (params?: { platform?: string; active_only?: boolean }) =>
@@ -169,7 +170,7 @@ export const socialAccountsAPI = {
       access_token?: string;
       refresh_token?: string;
       is_active?: boolean;
-      platform_data?: any;
+      platform_data?: Record<string, unknown>;
     }
   ) => api.put(`/api/v1/social-accounts/${id}`, data),
 
