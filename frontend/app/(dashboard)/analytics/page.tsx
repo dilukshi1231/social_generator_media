@@ -67,18 +67,21 @@ export default function AnalyticsPage() {
       {/* Metrics Grid */}
       <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
         {metrics.map((metric) => (
-          <Card key={metric.title}>
+          <Card
+            key={metric.title}
+            className="hover:shadow-xl transition-all duration-[400ms] ease-[cubic-bezier(0.23,1,0.32,1)] hover:-translate-y-2 cursor-pointer group"
+          >
             <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-gray-600">
+              <CardTitle className="text-sm font-medium text-gray-600 transition-colors duration-[400ms] ease-[cubic-bezier(0.23,1,0.32,1)] group-hover:text-gray-900">
                 {metric.title}
               </CardTitle>
-              <div className={`${metric.bgColor} p-2 rounded-full`}>
-                <metric.icon className={`h-5 w-5 ${metric.color}`} />
+              <div className={`${metric.bgColor} p-2 rounded-full transition-all duration-[400ms] ease-[cubic-bezier(0.23,1,0.32,1)] group-hover:scale-110 group-hover:shadow-md`}>
+                <metric.icon className={`h-5 w-5 ${metric.color} transition-transform duration-[400ms] ease-[cubic-bezier(0.23,1,0.32,1)] group-hover:rotate-12`} />
               </div>
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold">{metric.value}</div>
-              <p className="text-xs text-green-600 mt-1">
+              <div className="text-3xl font-bold transition-all duration-[400ms] ease-[cubic-bezier(0.23,1,0.32,1)] group-hover:scale-105">{metric.value}</div>
+              <p className="text-xs text-green-600 mt-1 transition-colors duration-[400ms] ease-[cubic-bezier(0.23,1,0.32,1)] group-hover:text-green-700">
                 {metric.change} from last month
               </p>
             </CardContent>
@@ -87,7 +90,7 @@ export default function AnalyticsPage() {
       </div>
 
       {/* Coming Soon Notice */}
-      <Card>
+      <Card className="hover:shadow-lg transition-all duration-[400ms] ease-[cubic-bezier(0.23,1,0.32,1)]">
         <CardHeader>
           <CardTitle>Detailed Analytics</CardTitle>
           <CardDescription>
@@ -96,7 +99,7 @@ export default function AnalyticsPage() {
         </CardHeader>
         <CardContent>
           <div className="text-center py-12">
-            <TrendingUp className="h-12 w-12 mx-auto text-gray-400 mb-4" />
+            <TrendingUp className="h-12 w-12 mx-auto text-gray-400 mb-4 transition-transform duration-[400ms] ease-[cubic-bezier(0.23,1,0.32,1)] hover:scale-110 hover:rotate-12" />
             <p className="text-gray-500">
               Detailed charts, graphs, and performance insights will be available here
             </p>

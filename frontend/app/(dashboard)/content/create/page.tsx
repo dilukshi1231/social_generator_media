@@ -20,7 +20,7 @@ export default function CreateContentPage() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatedContent, setGeneratedContent] = useState<Content | null>(null);
   const [webhookPhrase, setWebhookPhrase] = useState<string | null>(null);
-  const [webhookRaw, setWebhookRaw] = useState<unknown | null>(null);
+  const [webhookRaw, setWebhookRaw] = useState<Record<string, unknown> | null>(null);
   const [isWebhookLoading, setIsWebhookLoading] = useState(false);
   const [isRegenerating, setIsRegenerating] = useState(false);
 
@@ -223,43 +223,54 @@ export default function CreateContentPage() {
       </div>
 
       {!generatedContent ? (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Sparkles className="h-5 w-5 text-indigo-600" />
+        <Card className="border-0 shadow-2xl bg-gradient-to-br from-white to-slate-50/50 backdrop-blur-sm hover:shadow-3xl transition-all duration-[400ms] ease-[cubic-bezier(0.23,1,0.32,1)]">
+          <CardHeader className="pb-6 border-b border-slate-100 bg-gradient-to-r from-indigo-50/50 to-purple-50/50">
+            <CardTitle className="flex items-center gap-3 text-2xl">
+              <div className="p-3 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-xl shadow-lg">
+                <Sparkles className="h-6 w-6 text-white" />
+              </div>
               AI Content Generator
             </CardTitle>
-            <CardDescription>
-              Enter a topic and let AI create platform-specific content for you
+            <CardDescription className="text-base mt-2">
+              Enter a topic and let AI create stunning, platform-specific content for you ✨
             </CardDescription>
           </CardHeader>
           <form onSubmit={handleGenerate}>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="topic">Content Topic</Label>
+            <CardContent className="space-y-6 pt-6">
+              <div className="space-y-3">
+                <Label htmlFor="topic" className="text-base font-semibold text-slate-700">Content Topic</Label>
                 <Textarea
                   id="topic"
                   placeholder="E.g., 'Tips for healthy eating', 'Latest technology trends', 'Summer fashion ideas'..."
                   value={topic}
                   onChange={(e) => setTopic(e.target.value)}
                   disabled={isGenerating}
-                  rows={4}
+                  rows={5}
                   required
+                  className="resize-none text-base border-2 border-slate-200 focus:border-indigo-500 rounded-xl transition-all duration-[400ms] ease-[cubic-bezier(0.23,1,0.32,1)] hover:border-slate-300"
                 />
-                <p className="text-sm text-gray-500">
-                  Be specific! The more detailed your topic, the better the AI-generated content.
-                </p>
+                <div className="flex items-start gap-2 p-3 bg-indigo-50 rounded-lg border border-indigo-100">
+                  <Sparkles className="h-4 w-4 text-indigo-600 mt-0.5 flex-shrink-0" />
+                  <p className="text-sm text-indigo-700">
+                    <strong>Pro tip:</strong> Be specific! The more detailed your topic, the better the AI-generated content will be.
+                  </p>
+                </div>
               </div>
 
-              <Button type="submit" disabled={isGenerating} size="lg" className="w-full">
+              <Button
+                type="submit"
+                disabled={isGenerating}
+                size="lg"
+                className="w-full h-14 text-lg font-semibold bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 shadow-lg hover:shadow-xl transition-all duration-[400ms] ease-[cubic-bezier(0.23,1,0.32,1)] rounded-xl hover:-translate-y-0.5 group"
+              >
                 {isGenerating ? (
                   <>
-                    <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                    Generating Content...
+                    <Loader2 className="mr-2 h-6 w-6 animate-spin" />
+                    <span>Generating Magic...</span>
                   </>
                 ) : (
                   <>
-                    <Sparkles className="mr-2 h-5 w-5" />
+                    <Sparkles className="mr-2 h-6 w-6 transition-transform duration-[400ms] ease-[cubic-bezier(0.23,1,0.32,1)] group-hover:rotate-180" />
                     Generate Content
                   </>
                 )}
@@ -267,23 +278,28 @@ export default function CreateContentPage() {
             </CardContent>
           </form>
           {/* Show webhook phrase/output below generate section */}
-          <div className="mt-4">
-            <div className="bg-white border rounded-md p-4">
-              <h3 className="text-sm font-medium text-gray-700">Webhook Output</h3>
-              {isWebhookLoading ? (
-                <div className="flex items-center gap-2 mt-2 text-sm text-gray-500">
-                  <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"></path></svg>
-                  Sending topic to webhook...
-                </div>
-              ) : webhookPhrase ? (
-                <div className="mt-2 text-sm text-gray-800">{webhookPhrase}</div>
-              ) : webhookRaw ? (
-                <pre className="mt-2 text-xs text-gray-700 overflow-auto max-h-40">{JSON.stringify(webhookRaw as unknown, null, 2)}</pre>
-              ) : (
-                <div className="mt-2 text-sm text-gray-500">No webhook output yet</div>
-              )}
+          {(isWebhookLoading || webhookPhrase || webhookRaw) && (
+            <div className="mx-6 mb-6">
+              <div className="bg-gradient-to-br from-slate-50 to-slate-100/50 border-2 border-slate-200 rounded-xl p-5 transition-all duration-[400ms] ease-[cubic-bezier(0.23,1,0.32,1)] hover:border-slate-300 hover:shadow-md">
+                <h3 className="text-sm font-bold text-slate-700 uppercase tracking-wider mb-3 flex items-center gap-2">
+                  <div className="w-2 h-2 bg-indigo-600 rounded-full animate-pulse"></div>
+                  Webhook Output
+                </h3>
+                {isWebhookLoading ? (
+                  <div className="flex items-center gap-3 mt-2 text-sm text-slate-600">
+                    <svg className="h-5 w-5 animate-spin text-indigo-600" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"></path></svg>
+                    <span>Connecting to webhook...</span>
+                  </div>
+                ) : webhookPhrase ? (
+                  <div className="mt-2 p-4 bg-white rounded-lg border border-slate-200 shadow-sm">
+                    <p className="text-sm text-slate-800 leading-relaxed">{webhookPhrase}</p>
+                  </div>
+                ) : webhookRaw ? (
+                  <pre className="mt-2 p-4 bg-slate-900 text-green-400 rounded-lg text-xs overflow-auto max-h-48 font-mono shadow-inner">{JSON.stringify(webhookRaw, null, 2)}</pre>
+                ) : null}
+              </div>
             </div>
-          </div>
+          )}
         </Card>
       ) : (
         <ContentPreview
