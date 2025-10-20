@@ -209,4 +209,12 @@ This project is licensed under the MIT License.
 - shadcn/ui for the beautiful components
 - OpenAI for AI capabilities
 
+
+
 docker run -it --rm --name n8n -p 5678:5678 -v n8n_data:/home/node/.n8n n8nio/n8n
+
+# Start development server
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+
+# Start Frontend
+npm run dev
