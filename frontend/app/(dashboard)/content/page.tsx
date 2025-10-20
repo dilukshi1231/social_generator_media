@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -20,17 +20,13 @@ export default function ContentPage() {
   const [filter, setFilter] = useState<string>('all');
   const [selectedImage, setSelectedImage] = useState<{ url: string; topic: string; prompt?: string } | null>(null);
 
-  useEffect(() => {
-    fetchContents();
-  }, [filter]);
-
-  const fetchContents = async () => {
+  const fetchContents = useCallback(async () => {
     try {
       setIsLoading(true);
       const params = filter !== 'all' ? { status_filter: filter } : {};
       const response = await contentAPI.list(params);
       setContents(response.data);
-    } catch (error) {
+    } catch {
       toast({
         title: 'Error',
         description: 'Failed to fetch content',
@@ -39,7 +35,11 @@ export default function ContentPage() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [filter, toast]);
+
+  useEffect(() => {
+    fetchContents();
+  }, [fetchContents]);
 
   const handleDelete = async (id: number) => {
     if (!confirm('Are you sure you want to delete this content?')) return;
@@ -51,7 +51,7 @@ export default function ContentPage() {
         title: 'Content deleted',
         description: 'The content has been deleted successfully',
       });
-    } catch (error) {
+    } catch {
       toast({
         title: 'Error',
         description: 'Failed to delete content',
@@ -166,13 +166,16 @@ export default function ContentPage() {
                     className="relative w-full aspect-video rounded-xl overflow-hidden bg-gradient-to-br from-slate-100 to-slate-200 shadow-md group-hover:shadow-xl transition-all duration-500 ease-[cubic-bezier(0.23,1,0.32,1)] cursor-pointer will-change-transform"
                     onClick={(e) => {
                       e.stopPropagation();
-                      setSelectedImage({
-                        url: content.image_url,
-                        topic: content.topic,
-                        prompt: content.image_prompt
-                      });
+                      if (content.image_url) {
+                        setSelectedImage({
+                          url: content.image_url,
+                          topic: content.topic,
+                          prompt: content.image_prompt
+                        });
+                      }
                     }}
                   >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
                       src={content.image_url}
                       alt={content.topic}
@@ -233,6 +236,7 @@ export default function ContentPage() {
               <X className="h-5 w-5" />
             </Button>
             {selectedImage && (
+              /* eslint-disable-next-line @next/next/no-img-element */
               <img
                 src={selectedImage.url}
                 alt={selectedImage.topic}
