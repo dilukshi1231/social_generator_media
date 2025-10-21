@@ -254,17 +254,112 @@ export default function CreateContentPage() {
   };
 
   const handleRegenerateCaptions = async () => {
-    if (!generatedContent) return;
+    if (!generatedContent || !topic) return;
 
-    // Call webhook again with the same topic
-    await handleGenerate();
+    setIsGenerating(true);
+
+    try {
+      console.log('[Regenerate All] Calling n8n webhook to regenerate everything...');
+
+      // Step 1: Call n8n webhook to regenerate image and captions
+      const webhookUrl = 'http://localhost:5678/webhook-test/generate-social-posts';
+      console.log('[Regenerate All] Webhook URL:', webhookUrl);
+
+      const webhookResponse = await fetch(webhookUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ topic: topic.trim() }),
+      });
+
+      if (!webhookResponse.ok) {
+        throw new Error(`Webhook failed with status ${webhookResponse.status}`);
+      }
+
+      const parsedData = await webhookResponse.json();
+      console.log('[Regenerate All] Webhook response:', parsedData);
+
+      // Step 2: Generate image from prompt using backend proxy
+      let imageUrl = '';
+      if (parsedData.prompt) {
+        try {
+          imageUrl = await generateImage(parsedData.prompt);
+          console.log('[Regenerate All] Image generated successfully:', imageUrl);
+        } catch (imgError) {
+          console.error('[Regenerate All] Image generation failed:', imgError);
+        }
+      }
+
+      // Step 3: Update Content object with new data
+      const updatedContent: Content = {
+        ...generatedContent,
+        facebook_caption: parsedData.facebook_caption || '',
+        instagram_caption: parsedData.instagram_caption || '',
+        linkedin_caption: parsedData.linkedin_caption || '',
+        twitter_caption: parsedData.x_tweet || '',
+        threads_caption: parsedData.threads_caption || '',
+        pinterest_caption: parsedData.pinterest_caption || '',
+        image_prompt: parsedData.prompt || generatedContent.image_prompt || '',
+        image_url: imageUrl || generatedContent.image_url || '',
+      };
+
+      console.log('[Regenerate All] Updated Content:', updatedContent);
+
+      setGeneratedContent(updatedContent);
+
+      toast({
+        title: 'Content regenerated!',
+        description: 'New image and all captions have been generated',
+      });
+    } catch (error: unknown) {
+      console.error('[Regenerate All] Error:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+
+      toast({
+        title: 'Regeneration failed',
+        description: errorMessage || 'Failed to regenerate content',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsGenerating(false);
+    }
   };
 
   const handleRegenerateImage = async () => {
-    if (!generatedContent) return;
+    if (!generatedContent || !generatedContent.image_prompt) return;
 
-    // Call webhook again with the same topic
-    await handleGenerate();
+    setIsGenerating(true);
+
+    try {
+      console.log('[Regenerate Image] Regenerating image with same prompt:', generatedContent.image_prompt);
+
+      // Generate new image using the existing prompt
+      const imageUrl = await generateImage(generatedContent.image_prompt);
+      console.log('[Regenerate Image] New image generated:', imageUrl);
+
+      // Update only the image_url, keep everything else the same
+      const updatedContent: Content = {
+        ...generatedContent,
+        image_url: imageUrl,
+      };
+
+      setGeneratedContent(updatedContent);
+
+      toast({
+        title: 'Image regenerated!',
+        description: 'A new image has been generated using the same prompt',
+      });
+    } catch (error: unknown) {
+      console.error('[Regenerate Image] Error:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+
+      toast({
+        title: 'Image regeneration failed',
+        description: errorMessage || 'Failed to regenerate image',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsGenerating(false);
+    }
   };
 
   return (

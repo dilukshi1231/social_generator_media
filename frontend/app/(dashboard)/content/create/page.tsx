@@ -37,49 +37,72 @@ export default function CreateContentPage() {
     }
 
     setIsGenerating(true);
-    // Send topic to external webhook (n8n) for image-generation prompt/phrase
     setIsWebhookLoading(true);
     setWebhookPhrase(null);
     setWebhookRaw(null);
+
     try {
-      const webhookRes = await fetch('http://localhost:5678/webhook-test/viraldata', {
+      console.log('[Generate] Starting content generation with topic:', topic.trim());
+
+      // Call n8n webhook to generate image and captions
+      const webhookUrl = 'http://localhost:5678/webhook-test/generate-social-posts';
+      console.log('[Generate] Calling webhook:', webhookUrl);
+
+      const webhookRes = await fetch(webhookUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ Topic: topic.trim(), Intention: 'Image generation' }),
+        body: JSON.stringify({ topic: topic.trim() }),
       });
 
+      console.log('[Generate] Webhook response status:', webhookRes.status);
+
       if (!webhookRes.ok) {
-        throw new Error(`Webhook returned HTTP ${webhookRes.status}`);
+        const errorText = await webhookRes.text();
+        console.error('[Generate] Webhook error response:', errorText);
+        throw new Error(`Webhook returned HTTP ${webhookRes.status}: ${errorText}`);
       }
 
       const webhookData = await webhookRes.json();
-      const text = webhookData?.text || '';
-      const match = text.match(/```json\n([\s\S]*?)\n```/);
-      if (match) {
-        try {
-          const parsed = JSON.parse(match[1]);
-          setWebhookRaw(parsed);
-          setWebhookPhrase(parsed.phrase || null);
-        } catch {
-          setWebhookRaw(webhookData);
-          setWebhookPhrase(null);
-          toast({ title: 'Webhook parse failed', description: 'Received webhook response but failed to parse embedded JSON', variant: 'destructive' });
-        }
-      } else {
-        setWebhookRaw(webhookData);
-        setWebhookPhrase(null);
-      }
-    } catch (err: unknown) {
-      const e = err as Error;
-      toast({ title: 'Webhook Error', description: e.message || 'Failed to contact webhook', variant: 'destructive' });
-    } finally {
+      console.log('[Generate] Webhook response data:', webhookData);
+
+      // Store raw webhook data
+      setWebhookRaw(webhookData);
       setIsWebhookLoading(false);
-    }
-    try {
-      const response = await contentAPI.generate({
+
+      // Extract data from webhook response
+      const {
+        image_prompt,
+        image_url,
+        facebook_caption,
+        instagram_caption,
+        linkedin_caption,
+        pinterest_caption,
+        twitter_caption,
+        threads_caption,
+      } = webhookData;
+
+      console.log('[Generate] Extracted data:', {
+        image_prompt,
+        image_url: image_url?.substring(0, 50) + '...',
+        has_facebook: !!facebook_caption,
+        has_instagram: !!instagram_caption,
+      });
+
+      // Create content in backend with webhook data
+      const response = await contentAPI.create({
         topic: topic.trim(),
+        image_prompt: image_prompt || '',
+        image_url: image_url || '',
+        facebook_caption: facebook_caption || '',
+        instagram_caption: instagram_caption || '',
+        linkedin_caption: linkedin_caption || '',
+        pinterest_caption: pinterest_caption || '',
+        twitter_caption: twitter_caption || '',
+        threads_caption: threads_caption || '',
         auto_approve: false,
       });
+
+      console.log('[Generate] Content created successfully:', response.data.id);
 
       setGeneratedContent(response.data);
       toast({
@@ -87,14 +110,36 @@ export default function CreateContentPage() {
         description: 'Review your AI-generated content below',
       });
     } catch (error: unknown) {
-      const err = error as { response?: { data?: { detail?: string } } };
+      const err = error as Error | { response?: { data?: { detail?: string } } };
+      console.error('[Generate] Error:', err);
+
+      // Check for network/CORS errors
+      if (err instanceof TypeError && err.message.includes('Failed to fetch')) {
+        toast({
+          title: 'Connection Failed',
+          description: 'Cannot connect to n8n webhook. Make sure n8n is running on http://localhost:5678',
+          variant: 'destructive',
+        });
+        setIsGenerating(false);
+        setIsWebhookLoading(false);
+        return;
+      }
+
+      const errorMessage =
+        'response' in err && err.response?.data?.detail
+          ? err.response.data.detail
+          : err instanceof Error
+            ? err.message
+            : 'Failed to generate content';
+
       toast({
         title: 'Generation failed',
-        description: err.response?.data?.detail || 'Failed to generate content',
+        description: errorMessage,
         variant: 'destructive',
       });
     } finally {
       setIsGenerating(false);
+      setIsWebhookLoading(false);
     }
   };
 
@@ -164,25 +209,106 @@ export default function CreateContentPage() {
   };
 
   const handleRegenerateCaptions = async () => {
-    if (!generatedContent) return;
+    if (!generatedContent || !topic) return;
 
     setIsRegenerating(true);
+    setIsWebhookLoading(true);
+
     try {
-      const response = await contentAPI.regenerateCaptions(generatedContent.id);
+      console.log('[Regenerate All] Starting regeneration with topic:', topic.trim());
+
+      // Call n8n webhook to regenerate everything with the same topic
+      const webhookUrl = 'http://localhost:5678/webhook-test/generate-social-posts';
+      console.log('[Regenerate All] Calling webhook:', webhookUrl);
+
+      const webhookRes = await fetch(webhookUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ topic: topic.trim() }),
+      });
+
+      console.log('[Regenerate All] Webhook response status:', webhookRes.status);
+
+      if (!webhookRes.ok) {
+        const errorText = await webhookRes.text();
+        console.error('[Regenerate All] Webhook error response:', errorText);
+        throw new Error(`Webhook returned HTTP ${webhookRes.status}: ${errorText}`);
+      }
+
+      const webhookData = await webhookRes.json();
+      console.log('[Regenerate All] Webhook response data:', webhookData);
+
+      setWebhookRaw(webhookData);
+
+      // Extract data from webhook response
+      const {
+        image_prompt,
+        image_url,
+        facebook_caption,
+        instagram_caption,
+        linkedin_caption,
+        pinterest_caption,
+        twitter_caption,
+        threads_caption,
+      } = webhookData;
+
+      console.log('[Regenerate All] Extracted data:', {
+        image_prompt,
+        image_url: image_url?.substring(0, 50) + '...',
+        has_facebook: !!facebook_caption,
+        has_instagram: !!instagram_caption,
+      });
+
+      // Update the existing content with new data from n8n
+      const response = await contentAPI.create({
+        topic: topic.trim(),
+        image_prompt: image_prompt || generatedContent.image_prompt || '',
+        image_url: image_url || generatedContent.image_url || '',
+        facebook_caption: facebook_caption || '',
+        instagram_caption: instagram_caption || '',
+        linkedin_caption: linkedin_caption || '',
+        pinterest_caption: pinterest_caption || '',
+        twitter_caption: twitter_caption || '',
+        threads_caption: threads_caption || '',
+        auto_approve: false,
+      });
+
+      console.log('[Regenerate All] Content created successfully:', response.data.id);
+
       setGeneratedContent(response.data);
       toast({
-        title: 'Captions regenerated',
-        description: 'New captions have been generated',
+        title: 'Content regenerated!',
+        description: 'New image and captions have been generated from n8n workflow',
       });
     } catch (error: unknown) {
-      const err = error as { response?: { data?: { detail?: string } } };
+      const err = error as Error | { response?: { data?: { detail?: string } } };
+      console.error('[Regenerate All] Error:', err);
+
+      // Check for network/CORS errors
+      if (err instanceof TypeError && err.message.includes('Failed to fetch')) {
+        toast({
+          title: 'Connection Failed',
+          description: 'Cannot connect to n8n webhook. Make sure n8n is running on http://localhost:5678',
+          variant: 'destructive',
+        });
+        return;
+      }
+
+      const errorMessage =
+        'response' in err && err.response?.data?.detail
+          ? err.response.data.detail
+          : err instanceof Error
+            ? err.message
+            : 'Failed to regenerate content';
+
       toast({
-        title: 'Error',
-        description: err.response?.data?.detail || 'Failed to regenerate captions',
+        title: 'Regeneration failed',
+        description: errorMessage,
         variant: 'destructive',
       });
     } finally {
       setIsRegenerating(false);
+      setIsWebhookLoading(false);
     }
   };
 
@@ -191,11 +317,12 @@ export default function CreateContentPage() {
 
     setIsRegenerating(true);
     try {
+      // Use the backend endpoint which regenerates image using the same prompt
       const response = await contentAPI.regenerateImage(generatedContent.id);
       setGeneratedContent(response.data);
       toast({
         title: 'Image regenerated',
-        description: 'A new image has been generated',
+        description: 'A new image has been generated using the same prompt',
       });
     } catch (error: unknown) {
       const err = error as { response?: { data?: { detail?: string } } };
