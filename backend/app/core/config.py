@@ -43,6 +43,10 @@ class Settings(BaseSettings):
     GEMINI_API_KEY: str = ""
     GOOGLE_API_KEY: str = ""  # ADD THIS (alias for GEMINI)
 
+    # Cloudflare Worker for Image Generation
+    CLOUDEFARE_WORKER_URL: str = ""
+    CLOUDEFARE_WORKER_AUTH_TOKEN: str = ""
+
     # Social Media
     TWITTER_API_KEY: str = ""
     TWITTER_API_SECRET: str = ""

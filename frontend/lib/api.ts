@@ -17,7 +17,7 @@ api.interceptors.request.use(
     if (config.url?.includes('/auth/login') || config.url?.includes('/auth/register')) {
       return config;
     }
-    
+
     const token = localStorage.getItem('access_token');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
@@ -33,7 +33,7 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => response,
   async (error: AxiosError) => {
-    const originalRequest = error.config as any;
+    const originalRequest = error.config as (typeof error.config & { _retry?: boolean });
 
     // If token expired, try to refresh
     if (error.response?.status === 401 && !originalRequest._retry) {
@@ -41,11 +41,11 @@ api.interceptors.response.use(
 
       try {
         const refreshToken = localStorage.getItem('refresh_token');
-        
+
         if (!refreshToken) {
           throw new Error('No refresh token');
         }
-        
+
         // Create a new axios instance to avoid interceptor loops
         const refreshResponse = await axios.post(
           `${API_URL}/api/v1/auth/refresh`,
@@ -59,25 +59,26 @@ api.interceptors.response.use(
         );
 
         const { access_token, refresh_token } = refreshResponse.data;
-        
+
         localStorage.setItem('access_token', access_token);
         localStorage.setItem('refresh_token', refresh_token);
 
         // Update the failed request with new token
         originalRequest.headers.Authorization = `Bearer ${access_token}`;
         return api(originalRequest);
-      } catch (refreshError: any) {
-        console.error('Token refresh failed:', refreshError.response?.data);
-        
+      } catch (refreshError: unknown) {
+        const errorData = refreshError instanceof Error ? refreshError.message : 'Unknown error';
+        console.error('Token refresh failed:', errorData);
+
         // Refresh failed, clear tokens and redirect
         localStorage.removeItem('access_token');
         localStorage.removeItem('refresh_token');
-        
+
         // Only redirect if we're not already on the login page
         if (typeof window !== 'undefined' && !window.location.pathname.includes('/login')) {
           window.location.href = '/login';
         }
-        
+
         return Promise.reject(refreshError);
       }
     }
@@ -100,7 +101,7 @@ export const authAPI = {
     const formData = new URLSearchParams();
     formData.append('username', data.username);
     formData.append('password', data.password);
-    
+
     return api.post('/api/v1/auth/login', formData, {
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     });
@@ -115,6 +116,19 @@ export const authAPI = {
 export const contentAPI = {
   generate: (data: { topic: string; auto_approve?: boolean }) =>
     api.post('/api/v1/content/generate', data),
+
+  create: (data: {
+    topic: string;
+    facebook_caption?: string;
+    instagram_caption?: string;
+    linkedin_caption?: string;
+    pinterest_caption?: string;
+    twitter_caption?: string;
+    threads_caption?: string;
+    image_prompt?: string;
+    image_url?: string;
+    auto_approve?: boolean;
+  }) => api.post('/api/v1/content/create', data),
 
   list: (params?: { skip?: number; limit?: number; status_filter?: string }) =>
     api.get('/api/v1/content/', { params }),
@@ -142,7 +156,7 @@ export const socialAccountsAPI = {
     refresh_token?: string;
     platform_user_id?: string;
     display_name?: string;
-    platform_data?: any;
+    platform_data?: Record<string, unknown>;
   }) => api.post('/api/v1/social-accounts/', data),
 
   list: (params?: { platform?: string; active_only?: boolean }) =>
@@ -156,7 +170,7 @@ export const socialAccountsAPI = {
       access_token?: string;
       refresh_token?: string;
       is_active?: boolean;
-      platform_data?: any;
+      platform_data?: Record<string, unknown>;
     }
   ) => api.put(`/api/v1/social-accounts/${id}`, data),
 
