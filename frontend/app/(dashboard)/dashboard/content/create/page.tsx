@@ -254,64 +254,165 @@ export default function CreateContentPage() {
   };
 
   const handleRegenerateCaptions = async () => {
-    if (!generatedContent) return;
+    if (!generatedContent || !topic) return;
 
-    // Call webhook again with the same topic
-    await handleGenerate();
+    setIsGenerating(true);
+
+    try {
+      console.log('[Regenerate All] Calling n8n webhook to regenerate everything...');
+
+      // Step 1: Call n8n webhook to regenerate image and captions
+      const webhookUrl = 'http://localhost:5678/webhook-test/generate-social-posts';
+      console.log('[Regenerate All] Webhook URL:', webhookUrl);
+
+      const webhookResponse = await fetch(webhookUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ topic: topic.trim() }),
+      });
+
+      if (!webhookResponse.ok) {
+        throw new Error(`Webhook failed with status ${webhookResponse.status}`);
+      }
+
+      const parsedData = await webhookResponse.json();
+      console.log('[Regenerate All] Webhook response:', parsedData);
+
+      // Step 2: Generate image from prompt using backend proxy
+      let imageUrl = '';
+      if (parsedData.prompt) {
+        try {
+          imageUrl = await generateImage(parsedData.prompt);
+          console.log('[Regenerate All] Image generated successfully:', imageUrl);
+        } catch (imgError) {
+          console.error('[Regenerate All] Image generation failed:', imgError);
+        }
+      }
+
+      // Step 3: Update Content object with new data
+      const updatedContent: Content = {
+        ...generatedContent,
+        facebook_caption: parsedData.facebook_caption || '',
+        instagram_caption: parsedData.instagram_caption || '',
+        linkedin_caption: parsedData.linkedin_caption || '',
+        twitter_caption: parsedData.x_tweet || '',
+        threads_caption: parsedData.threads_caption || '',
+        pinterest_caption: parsedData.pinterest_caption || '',
+        image_prompt: parsedData.prompt || generatedContent.image_prompt || '',
+        image_url: imageUrl || generatedContent.image_url || '',
+      };
+
+      console.log('[Regenerate All] Updated Content:', updatedContent);
+
+      setGeneratedContent(updatedContent);
+
+      toast({
+        title: 'Content regenerated!',
+        description: 'New image and all captions have been generated',
+      });
+    } catch (error: unknown) {
+      console.error('[Regenerate All] Error:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+
+      toast({
+        title: 'Regeneration failed',
+        description: errorMessage || 'Failed to regenerate content',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsGenerating(false);
+    }
   };
 
   const handleRegenerateImage = async () => {
-    if (!generatedContent) return;
+    if (!generatedContent || !generatedContent.image_prompt) return;
 
-    // Call webhook again with the same topic
-    await handleGenerate();
+    setIsGenerating(true);
+
+    try {
+      console.log('[Regenerate Image] Regenerating image with same prompt:', generatedContent.image_prompt);
+
+      // Generate new image using the existing prompt
+      const imageUrl = await generateImage(generatedContent.image_prompt);
+      console.log('[Regenerate Image] New image generated:', imageUrl);
+
+      // Update only the image_url, keep everything else the same
+      const updatedContent: Content = {
+        ...generatedContent,
+        image_url: imageUrl,
+      };
+
+      setGeneratedContent(updatedContent);
+
+      toast({
+        title: 'Image regenerated!',
+        description: 'A new image has been generated using the same prompt',
+      });
+    } catch (error: unknown) {
+      console.error('[Regenerate Image] Error:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+
+      toast({
+        title: 'Image regeneration failed',
+        description: errorMessage || 'Failed to regenerate image',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsGenerating(false);
+    }
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       {/* Header */}
       <div className="flex items-center gap-4">
         <Button
           variant="ghost"
           size="icon"
           onClick={() => router.back()}
+          className="hover:bg-slate-100 rounded-xl"
         >
           <ArrowLeft className="h-5 w-5" />
         </Button>
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">Create Content</h1>
-          <p className="text-gray-600 mt-1">
-            Generate AI-powered content for your social media
+        <div className="flex-1">
+          <h1 className="text-4xl font-bold bg-gradient-to-r from-slate-900 via-indigo-900 to-purple-900 bg-clip-text text-transparent">
+            Create Content
+          </h1>
+          <p className="text-slate-600 mt-2 text-lg">
+            Generate AI-powered content for all your social media platforms
           </p>
         </div>
       </div>
 
       {/* Content Generation Form */}
       {!generatedContent && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Sparkles className="h-5 w-5 text-indigo-600" />
+        <Card className="border-0 shadow-xl bg-white/80 backdrop-blur-sm card-hover">
+          <CardHeader className="pb-4">
+            <CardTitle className="flex items-center gap-3 text-2xl">
+              <div className="p-2 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl shadow-lg">
+                <Sparkles className="h-6 w-6 text-white" />
+              </div>
               AI Content Generator
             </CardTitle>
-            <CardDescription>
-              Enter a topic and let AI create platform-specific content and images
+            <CardDescription className="text-base mt-2">
+              Enter a topic and let AI create platform-specific content and stunning images
             </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="topic">Content Topic</Label>
+          <CardContent className="space-y-6">
+            <div className="space-y-3">
+              <Label htmlFor="topic" className="text-base font-semibold text-slate-700">Content Topic</Label>
               <Textarea
                 id="topic"
                 placeholder="Example: 10 tips for remote work productivity, Benefits of meditation, New product launch..."
                 value={topic}
                 onChange={(e) => setTopic(e.target.value)}
-                rows={4}
+                rows={5}
                 disabled={isGenerating}
-                className="resize-none"
+                className="resize-none text-base border-2 focus:border-indigo-500 rounded-xl transition-all"
               />
-              <p className="text-sm text-gray-500">
-                Be specific for better results. The AI will generate captions for all platforms.
+              <p className="text-sm text-slate-500 flex items-start gap-2">
+                <span className="text-indigo-600 mt-0.5">💡</span>
+                <span>Be specific for better results. The AI will generate optimized captions for all platforms.</span>
               </p>
             </div>
 
@@ -320,34 +421,46 @@ export default function CreateContentPage() {
                 onClick={handleGenerate}
                 disabled={isGenerating || !topic.trim()}
                 size="lg"
-                className="flex-1"
+                className="flex-1 h-14 text-base font-semibold bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 shadow-lg hover:shadow-xl transition-all rounded-xl btn-shine"
               >
                 {isGenerating ? (
                   <>
                     <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                    Generating... (30-60s)
+                    Generating Magic... (30-60s)
                   </>
                 ) : (
                   <>
                     <Sparkles className="mr-2 h-5 w-5" />
-                    Generate Content Yo
+                    Generate Content
                   </>
                 )}
               </Button>
             </div>
 
             {isGenerating && (
-              <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-4">
-                <p className="text-sm text-indigo-900 font-medium">
-                  AI is working its magic... ✨
-                </p>
-                <p className="text-sm text-indigo-700 mt-1">
+              <div className="bg-gradient-to-r from-indigo-50 to-purple-50 border-2 border-indigo-200 rounded-xl p-6 animate-fade-in">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="p-2 bg-indigo-600 rounded-lg">
+                    <Sparkles className="h-5 w-5 text-white animate-pulse" />
+                  </div>
+                  <p className="text-base text-indigo-900 font-semibold">
+                    AI is working its magic... ✨
+                  </p>
+                </div>
+                <p className="text-sm text-indigo-700 mb-3">
                   This may take 30-60 seconds. We&apos;re generating:
                 </p>
-                <ul className="text-sm text-indigo-700 mt-2 space-y-1 list-disc list-inside">
-                  <li>Platform-specific captions (Facebook, Instagram, LinkedIn, Twitter, Threads)</li>
-                  <li>Optimized image prompt</li>
-                  <li>AI-generated image</li>
+                <ul className="text-sm text-indigo-700 space-y-2">
+                  {[
+                    'Platform-specific captions (Facebook, Instagram, LinkedIn, Twitter, Threads)',
+                    'Optimized image prompt for maximum engagement',
+                    'AI-generated professional image'
+                  ].map((item, index) => (
+                    <li key={index} className="flex items-center gap-2">
+                      <span className="flex-shrink-0 w-1.5 h-1.5 bg-indigo-600 rounded-full"></span>
+                      <span>{item}</span>
+                    </li>
+                  ))}
                 </ul>
               </div>
             )}

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -20,21 +20,30 @@ interface ConnectAccountDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess: () => void;
+  selectedPlatform?: string;
 }
 
 export default function ConnectAccountDialog({
   open,
   onOpenChange,
   onSuccess,
+  selectedPlatform,
 }: ConnectAccountDialogProps) {
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
   const [formData, setFormData] = useState({
-    platform: '',
+    platform: selectedPlatform || '',
     username: '',
     accessToken: '',
     displayName: '',
   });
+
+  // Update form data when selectedPlatform changes
+  useEffect(() => {
+    if (selectedPlatform) {
+      setFormData(prev => ({ ...prev, platform: selectedPlatform }));
+    }
+  }, [selectedPlatform]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -62,10 +71,13 @@ export default function ConnectAccountDialog({
         accessToken: '',
         displayName: '',
       });
-    } catch (error: any) {
+    } catch (error) {
+      const errorMessage = error instanceof Error && 'response' in error
+        ? (error as { response?: { data?: { detail?: string } } }).response?.data?.detail || 'Failed to connect account'
+        : 'Failed to connect account';
       toast({
         title: 'Connection failed',
-        description: error.response?.data?.detail || 'Failed to connect account',
+        description: errorMessage,
         variant: 'destructive',
       });
     } finally {
@@ -140,7 +152,7 @@ export default function ConnectAccountDialog({
               disabled={isLoading}
               required
             />
-            <p className="text-xs text-gray-500">
+            <p className="text-xs text-gray-700">
               For testing purposes. In production, this would be obtained via OAuth.
             </p>
           </div>
