@@ -24,6 +24,15 @@ export default function ContentPage() {
       setIsLoading(true);
       const params = filter !== 'all' ? { status_filter: filter } : {};
       const response = await contentAPI.list(params);
+      console.log('Fetched contents:', response.data);
+      response.data.forEach((content: Content, index: number) => {
+        console.log(`Content ${index + 1}:`, {
+          id: content.id,
+          topic: content.topic,
+          image_url: content.image_url,
+          has_image: !!content.image_url
+        });
+      });
       setContents(response.data);
     } catch {
       toast({
