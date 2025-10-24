@@ -8,9 +8,8 @@ import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { contentAPI } from '@/lib/api';
 import { useToast } from '@/components/ui/use-toast';
-import { Plus, Eye, Trash2, RefreshCw, X, Maximize2 } from 'lucide-react';
+import { Plus, Eye, Trash2, RefreshCw, X, Maximize2, Send } from 'lucide-react';
 import type { Content } from '@/types';
-import PublishDialog from '@/components/content/publish-dialog';
 
 export default function ContentPage() {
   const router = useRouter();
@@ -58,11 +57,6 @@ export default function ContentPage() {
         variant: 'destructive',
       });
     }
-  };
-
-  const handlePublish = (content: Content) => {
-    setSelectedContent(content);
-    setPublishDialogOpen(true);
   };
 
   const getStatusColor = (status: string) => {
@@ -202,10 +196,10 @@ export default function ContentPage() {
                     <Button
                       size="sm"
                       className="flex-1"
-                      onClick={() => handlePublish(content)}
+                      onClick={() => router.push('/dashboard/posts')}
                     >
                       <Send className="mr-2 h-4 w-4" />
-                      Publish
+                      View Posts
                     </Button>
                   )}
                   <Button

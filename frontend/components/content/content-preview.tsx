@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
-import { Check, X, RefreshCw, Facebook, Instagram, Linkedin, Twitter, Image as ImageIcon, Copy, Sparkles } from 'lucide-react';
+import { Check, X, RefreshCw, Facebook, Instagram, Linkedin, Twitter, Image as ImageIcon, Copy, Sparkles, Send, Clock } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import type { Content } from '@/types';
 import Image from 'next/image';
@@ -13,7 +13,7 @@ import PublishDialog from '@/components/content/publish-dialog';
 
 interface ContentPreviewProps {
   content: Content;
-  onApprove: () => void;
+  onApprove?: () => void;
   onReject: () => void;
   onRegenerateCaptions: () => void;
   onRegenerateImage: () => void;
@@ -29,6 +29,14 @@ export default function ContentPreview({
   isLoading = false,
 }: ContentPreviewProps) {
   const { toast } = useToast();
+  const [publishDialogOpen, setPublishDialogOpen] = useState(false);
+
+  const handleApproveAndPublish = () => {
+    if (onApprove) {
+      onApprove();
+    }
+    setPublishDialogOpen(true);
+  };
 
   const platforms = [
     {
