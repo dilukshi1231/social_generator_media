@@ -11,12 +11,17 @@ import { Facebook, Instagram, Linkedin, Twitter, Plus, CheckCircle, AlertCircle,
 import type { SocialAccount, PlatformType } from '@/types';
 import ConnectAccountDialog from '@/components/social-accounts/connect-account-dialog';
 
+interface Platform {
+  name: string;
+  value: string;
+}
+
 export default function SocialAccountsPage() {
   const { toast } = useToast();
   const [accounts, setAccounts] = useState<SocialAccount[]>([]);
-  const [availablePlatforms, setAvailablePlatforms] = useState<any[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [availablePlatforms, setAvailablePlatforms] = useState<Platform[]>([]);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [selectedPlatform, setSelectedPlatform] = useState<string | undefined>(undefined);
 
   useEffect(() => {
     fetchAccounts();
@@ -29,8 +34,6 @@ export default function SocialAccountsPage() {
       setAccounts(response.data);
     } catch (error) {
       console.error('Failed to fetch accounts:', error);
-    } finally {
-      setIsLoading(false);
     }
   };
 
@@ -55,10 +58,13 @@ export default function SocialAccountsPage() {
         title: 'Account disconnected',
         description: 'The social media account has been disconnected',
       });
-    } catch (error: any) {
+    } catch (error) {
+      const errorMessage = error instanceof Error && 'response' in error
+        ? (error as { response?: { data?: { detail?: string } } }).response?.data?.detail || 'Failed to disconnect account'
+        : 'Failed to disconnect account';
       toast({
         title: 'Disconnect failed',
-        description: error.response?.data?.detail || 'Failed to disconnect account',
+        description: errorMessage,
         variant: 'destructive',
       });
     }
@@ -75,8 +81,8 @@ export default function SocialAccountsPage() {
     return icons[platform] || Twitter;
   };
 
-  const getPlatformColor = (platform: PlatformType) => {
-    const colors = {
+  const getPlatformColor = (platform: string) => {
+    const colors: Record<string, string> = {
       facebook: 'text-blue-600 bg-blue-50',
       instagram: 'text-pink-600 bg-pink-50',
       linkedin: 'text-blue-700 bg-blue-50',
@@ -96,11 +102,14 @@ export default function SocialAccountsPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Social Accounts</h1>
-          <p className="text-gray-600 mt-1">
+          <p className="text-gray-900 mt-1">
             Connect and manage your social media accounts
           </p>
         </div>
-        <Button onClick={() => setIsDialogOpen(true)} size="lg">
+        <Button onClick={() => {
+          setSelectedPlatform(undefined);
+          setIsDialogOpen(true);
+        }} size="lg">
           <Plus className="mr-2 h-5 w-5" />
           Connect Account
         </Button>
@@ -110,7 +119,7 @@ export default function SocialAccountsPage() {
       <Alert>
         <AlertCircle className="h-4 w-4" />
         <AlertDescription>
-          Connect your social media accounts to start publishing content. You'll need to authorize each platform separately.
+          Connect your social media accounts to start publishing content. You&apos;ll need to authorize each platform separately.
         </AlertDescription>
       </Alert>
 
@@ -151,7 +160,10 @@ export default function SocialAccountsPage() {
                     <Button
                       variant={connected ? 'outline' : 'default'}
                       className="w-full mt-4"
-                      onClick={() => setIsDialogOpen(true)}
+                      onClick={() => {
+                        setSelectedPlatform(platform.value);
+                        setIsDialogOpen(true);
+                      }}
                       disabled={connected}
                     >
                       {connected ? 'Connected' : 'Connect'}
@@ -170,8 +182,8 @@ export default function SocialAccountsPage() {
           <CardHeader>
             <CardTitle>Connected Accounts</CardTitle>
             <CardDescription>
-            Manage your connected social media accounts
-          </CardDescription>
+              Manage your connected social media accounts
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
@@ -190,10 +202,10 @@ export default function SocialAccountsPage() {
                         <h4 className="font-semibold capitalize">
                           {account.platform}
                         </h4>
-                        <p className="text-sm text-gray-600">
+                        <p className="text-sm text-gray-900">
                           {account.display_name || account.username || 'No username'}
                         </p>
-                        <p className="text-xs text-gray-500">
+                        <p className="text-xs text-gray-700">
                           Connected {new Date(account.connected_at).toLocaleDateString()}
                         </p>
                       </div>
@@ -223,6 +235,7 @@ export default function SocialAccountsPage() {
         open={isDialogOpen}
         onOpenChange={setIsDialogOpen}
         onSuccess={fetchAccounts}
+        selectedPlatform={selectedPlatform}
       />
     </div>
   );

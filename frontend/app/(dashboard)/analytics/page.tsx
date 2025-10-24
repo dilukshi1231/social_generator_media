@@ -61,7 +61,7 @@ export default function AnalyticsPage() {
       {/* Header */}
       <div>
         <h1 className="text-3xl font-bold text-gray-900">Analytics</h1>
-        <p className="text-gray-600 mt-1">Track your social media performance</p>
+        <p className="text-gray-900 mt-1">Track your social media performance</p>
       </div>
 
       {/* Metrics Grid */}
@@ -72,7 +72,7 @@ export default function AnalyticsPage() {
             className="hover:shadow-xl transition-all duration-[400ms] ease-[cubic-bezier(0.23,1,0.32,1)] hover:-translate-y-2 cursor-pointer group"
           >
             <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-gray-600 transition-colors duration-[400ms] ease-[cubic-bezier(0.23,1,0.32,1)] group-hover:text-gray-900">
+              <CardTitle className="text-sm font-medium text-gray-900 transition-colors duration-[400ms] ease-[cubic-bezier(0.23,1,0.32,1)]">
                 {metric.title}
               </CardTitle>
               <div className={`${metric.bgColor} p-2 rounded-full transition-all duration-[400ms] ease-[cubic-bezier(0.23,1,0.32,1)] group-hover:scale-110 group-hover:shadow-md`}>
@@ -99,11 +99,11 @@ export default function AnalyticsPage() {
         </CardHeader>
         <CardContent>
           <div className="text-center py-12">
-            <TrendingUp className="h-12 w-12 mx-auto text-gray-400 mb-4 transition-transform duration-[400ms] ease-[cubic-bezier(0.23,1,0.32,1)] hover:scale-110 hover:rotate-12" />
-            <p className="text-gray-500">
+            <TrendingUp className="h-12 w-12 mx-auto text-indigo-600 mb-4 transition-transform duration-[400ms] ease-[cubic-bezier(0.23,1,0.32,1)] hover:scale-110 hover:rotate-12" />
+            <p className="text-gray-900 text-lg font-medium">
               Detailed charts, graphs, and performance insights will be available here
             </p>
-            <p className="text-sm text-gray-400 mt-2">
+            <p className="text-sm text-gray-700 mt-2">
               Track engagement, reach, and audience growth across all platforms
             </p>
           </div>

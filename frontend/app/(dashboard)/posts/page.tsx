@@ -90,7 +90,7 @@ export default function PostsPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Posts</h1>
-          <p className="text-gray-600 mt-1">Track your published and scheduled posts</p>
+          <p className="text-gray-900 mt-1">Track your published and scheduled posts</p>
         </div>
         <Button onClick={fetchPosts} size="lg" variant="outline" className="transition-all duration-[400ms] ease-[cubic-bezier(0.23,1,0.32,1)] hover:-translate-y-0.5 hover:shadow-md group">
           <RefreshCw className="mr-2 h-5 w-5 transition-transform duration-[400ms] ease-[cubic-bezier(0.23,1,0.32,1)] group-hover:rotate-180" />
@@ -116,7 +116,7 @@ export default function PostsPage() {
       <div className="grid gap-4 md:grid-cols-4">
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-gray-600">Total Posts</CardTitle>
+            <CardTitle className="text-sm font-medium text-gray-900">Total Posts</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{posts.length}</div>
@@ -124,7 +124,7 @@ export default function PostsPage() {
         </Card>
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-gray-600">Published</CardTitle>
+            <CardTitle className="text-sm font-medium text-gray-900">Published</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-green-600">
@@ -134,7 +134,7 @@ export default function PostsPage() {
         </Card>
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-gray-600">Scheduled</CardTitle>
+            <CardTitle className="text-sm font-medium text-gray-900">Scheduled</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-yellow-600">
@@ -144,7 +144,7 @@ export default function PostsPage() {
         </Card>
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-gray-600">Failed</CardTitle>
+            <CardTitle className="text-sm font-medium text-gray-900">Failed</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-red-600">
@@ -162,8 +162,8 @@ export default function PostsPage() {
       ) : posts.length === 0 ? (
         <Card className="hover:shadow-lg transition-all duration-[400ms] ease-[cubic-bezier(0.23,1,0.32,1)]">
           <CardContent className="text-center py-12">
-            <p className="text-gray-500">No posts found</p>
-            <p className="text-sm text-gray-400 mt-2">Create and approve content to start posting</p>
+            <p className="text-gray-900 text-lg font-medium">No posts found</p>
+            <p className="text-sm text-gray-700 mt-2">Create and approve content to start posting</p>
           </CardContent>
         </Card>
       ) : (
@@ -185,7 +185,7 @@ export default function PostsPage() {
               </CardHeader>
               <CardContent>
                 <div className="flex items-center justify-between mb-4">
-                  <div className="text-sm text-gray-500">
+                  <div className="text-sm text-gray-900">
                     {post.posted_at ? (
                       <span>Posted {new Date(post.posted_at).toLocaleString()}</span>
                     ) : post.scheduled_for ? (
