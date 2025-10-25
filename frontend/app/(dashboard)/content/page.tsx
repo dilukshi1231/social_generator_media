@@ -12,6 +12,11 @@ import { Plus, Eye, Trash2, RefreshCw, X, Send, Facebook, Instagram, Linkedin, T
 import type { Content } from '@/types';
 import PublishDialog from '@/components/content/publish-dialog';
 
+const formatStatus = (status: string) => {
+  const t = status.replace('_', ' ');
+  return t.charAt(0).toUpperCase() + t.slice(1);
+};
+
 export default function ContentPage() {
   const router = useRouter();
   const { toast } = useToast();
@@ -179,7 +184,7 @@ export default function ContentPage() {
                   <img src={content.image_url} alt={content.topic} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-black/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
                   <div className="absolute top-3 left-3">
-                    <Badge className={`${getStatusColor(content.status)} text-white shadow`}>{content.status.replace('_', ' ')}</Badge>
+                    <Badge className={`${getStatusColor(content.status)} text-white shadow`}>{formatStatus(content.status)}</Badge>
                   </div>
                 </div>
               ) : (
