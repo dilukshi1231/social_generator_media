@@ -35,6 +35,10 @@ class Settings(BaseSettings):
     FACEBOOK_APP_SECRET: str = ""
     FACEBOOK_REDIRECT_URI: str = ""  # ADD THIS
     FRONTEND_URL: str = ""  # ADD THIS
+    BACKEND_URL: str = (
+        "http://localhost:8000"  # Base URL for backend (for OAuth callbacks)
+    )
+    LINKEDIN_REDIRECT_URI: str = ""  # Optional explicit LinkedIn redirect URI
 
     # AI Services
     OPENAI_API_KEY: str = ""
