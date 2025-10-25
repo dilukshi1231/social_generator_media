@@ -143,16 +143,18 @@ export default function CreateContentPage() {
     }
   };
 
-  const handleApprove = async () => {
-    if (!generatedContent) return;
+  const handleApprove = async (): Promise<boolean> => {
+    if (!generatedContent) return false;
 
     try {
-      await contentAPI.approve(generatedContent.id, { approved: true });
+      const res = await contentAPI.approve(generatedContent.id, { approved: true });
+      // Update local state to reflect approved status without navigating away
+      setGeneratedContent(res.data as Content);
       toast({
         title: 'Content approved!',
-        description: 'You can now publish this content',
+        description: 'Select platforms to publish your content',
       });
-      router.push('/dashboard/content');
+      return true;
     } catch (error: unknown) {
       const err = error as { response?: { data?: { detail?: string } } };
       toast({
@@ -160,6 +162,7 @@ export default function CreateContentPage() {
         description: err.response?.data?.detail || 'Failed to approve content',
         variant: 'destructive',
       });
+      return false;
     }
   };
 

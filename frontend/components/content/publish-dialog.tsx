@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -39,22 +39,16 @@ export default function PublishDialog({
   const [isScheduled, setIsScheduled] = useState(false);
   const [fetchingAccounts, setFetchingAccounts] = useState(false);
 
-  useEffect(() => {
-    if (open) {
-      fetchConnectedAccounts();
-    }
-  }, [open]);
-
-  const fetchConnectedAccounts = async () => {
+  const fetchConnectedAccounts = useCallback(async () => {
     setFetchingAccounts(true);
     try {
       const response = await socialAccountsAPI.list({ active_only: true });
       const accounts = response.data.filter((acc: SocialAccount) => acc.is_connected);
       setConnectedAccounts(accounts);
-      
+
       // Auto-select all connected platforms
       setSelectedPlatforms(accounts.map((acc: SocialAccount) => acc.platform));
-    } catch (error) {
+    } catch {
       toast({
         title: 'Error',
         description: 'Failed to fetch connected accounts',
@@ -63,10 +57,18 @@ export default function PublishDialog({
     } finally {
       setFetchingAccounts(false);
     }
-  };
+  }, [toast]);
+
+  useEffect(() => {
+    if (open) {
+      fetchConnectedAccounts();
+    }
+  }, [open, fetchConnectedAccounts]);
+
+
 
   const getPlatformIcon = (platform: string) => {
-    const icons: Record<string, any> = {
+    const icons: Record<string, React.ElementType> = {
       facebook: Facebook,
       instagram: Instagram,
       linkedin: Linkedin,
@@ -86,7 +88,7 @@ export default function PublishDialog({
   };
 
   const togglePlatform = (platform: string) => {
-    setSelectedPlatforms(prev => 
+    setSelectedPlatforms(prev =>
       prev.includes(platform)
         ? prev.filter(p => p !== platform)
         : [...prev, platform]
@@ -114,7 +116,7 @@ export default function PublishDialog({
         return;
       }
       scheduledFor = `${scheduledDate}T${scheduledTime}:00`;
-      
+
       // Validate future date
       const scheduledDateTime = new Date(scheduledFor);
       if (scheduledDateTime <= new Date()) {
@@ -138,21 +140,22 @@ export default function PublishDialog({
 
       toast({
         title: isScheduled ? 'Post scheduled!' : 'Publishing...',
-        description: isScheduled 
+        description: isScheduled
           ? `Your post has been scheduled for ${new Date(scheduledFor!).toLocaleString()}`
           : 'Your post is being published to selected platforms',
       });
 
       onOpenChange(false);
-      
-      // Redirect to posts page after a short delay
+
+      // Redirect to content list after decision
       setTimeout(() => {
-        router.push('/dashboard/posts');
-      }, 1500);
-    } catch (error: any) {
+        router.push('/dashboard/content');
+      }, 800);
+    } catch (error: unknown) {
+      const message = (error as { response?: { data?: { detail?: string } } }).response?.data?.detail || 'Failed to publish content';
       toast({
         title: 'Publishing failed',
-        description: error.response?.data?.detail || 'Failed to publish content',
+        description: message,
         variant: 'destructive',
       });
     } finally {
@@ -198,17 +201,16 @@ export default function PublishDialog({
                   {connectedAccounts.map((account) => {
                     const Icon = getPlatformIcon(account.platform);
                     const isSelected = selectedPlatforms.includes(account.platform);
-                    
+
                     return (
                       <button
                         key={account.id}
                         type="button"
                         onClick={() => togglePlatform(account.platform)}
-                        className={`flex items-center gap-3 p-4 border rounded-lg transition-all ${
-                          isSelected
+                        className={`flex items-center gap-3 p-4 border rounded-lg transition-all ${isSelected
                             ? 'border-indigo-500 bg-indigo-50 ring-2 ring-indigo-200'
                             : 'border-gray-200 hover:border-gray-300'
-                        }`}
+                          }`}
                       >
                         <div className={`flex-shrink-0 ${isSelected ? 'opacity-100' : 'opacity-50'}`}>
                           <Icon className={`h-6 w-6 ${getPlatformColor(account.platform)}`} />
@@ -278,11 +280,15 @@ export default function PublishDialog({
                 <Button
                   type="button"
                   variant="outline"
-                  onClick={() => onOpenChange(false)}
+                  onClick={() => {
+                    onOpenChange(false);
+                    // User decided not to post now; redirect to content list
+                    router.push('/dashboard/content');
+                  }}
                   disabled={isLoading}
                   className="flex-1"
                 >
-                  Cancel
+                  Skip posting
                 </Button>
                 <Button
                   onClick={handlePublish}

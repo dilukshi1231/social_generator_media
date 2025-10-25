@@ -8,8 +8,9 @@ import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { contentAPI } from '@/lib/api';
 import { useToast } from '@/components/ui/use-toast';
-import { Plus, Eye, Trash2, RefreshCw, X, Maximize2, Send } from 'lucide-react';
+import { Plus, Eye, Trash2, RefreshCw, X, Send, Facebook, Instagram, Linkedin, Twitter, Image as ImageIcon } from 'lucide-react';
 import type { Content } from '@/types';
+import PublishDialog from '@/components/content/publish-dialog';
 
 export default function ContentPage() {
   const router = useRouter();
@@ -18,21 +19,14 @@ export default function ContentPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [filter, setFilter] = useState<string>('all');
   const [selectedImage, setSelectedImage] = useState<{ url: string; topic: string; prompt?: string } | null>(null);
+  const [publishOpen, setPublishOpen] = useState(false);
+  const [publishContent, setPublishContent] = useState<Content | null>(null);
 
   const fetchContents = useCallback(async () => {
     try {
       setIsLoading(true);
       const params = filter !== 'all' ? { status_filter: filter } : {};
       const response = await contentAPI.list(params);
-      console.log('Fetched contents:', response.data);
-      response.data.forEach((content: Content, index: number) => {
-        console.log(`Content ${index + 1}:`, {
-          id: content.id,
-          topic: content.topic,
-          image_url: content.image_url,
-          has_image: !!content.image_url
-        });
-      });
       setContents(response.data);
     } catch {
       toast({
@@ -80,6 +74,30 @@ export default function ContentPage() {
   };
 
   const filteredContents = contents;
+
+  const platformIcons = (
+    content: Content
+  ) => {
+    const items = [
+      { key: 'facebook', icon: Facebook, active: !!content.facebook_caption, color: 'text-blue-600' },
+      { key: 'instagram', icon: Instagram, active: !!content.instagram_caption, color: 'text-pink-600' },
+      { key: 'linkedin', icon: Linkedin, active: !!content.linkedin_caption, color: 'text-blue-700' },
+      { key: 'twitter', icon: Twitter, active: !!content.twitter_caption, color: 'text-slate-900' },
+    ];
+    return (
+      <div className="flex items-center gap-2">
+        {items.map(({ key, icon: Icon, active, color }) => (
+          <div
+            key={key}
+            className={`p-1.5 rounded-md ${active ? 'bg-white shadow-sm' : 'opacity-40'}`}
+            title={key}
+          >
+            <Icon className={`h-4 w-4 ${active ? color : 'text-slate-500'}`} />
+          </div>
+        ))}
+      </div>
+    );
+  };
 
   return (
     <div className="space-y-8">
@@ -148,76 +166,63 @@ export default function ContentPage() {
       ) : (
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
           {filteredContents.map((content) => (
-            <Card key={content.id} className="border-0 shadow-lg bg-white/80 backdrop-blur-sm hover:shadow-2xl transition-all duration-[400ms] ease-[cubic-bezier(0.23,1,0.32,1)] hover:-translate-y-2 overflow-hidden group cursor-pointer will-change-transform">
-              <CardHeader className="pb-3">
-                <div className="flex items-start justify-between gap-2">
-                  <CardTitle className="line-clamp-2 text-lg group-hover:text-indigo-600 transition-colors duration-[400ms] ease-[cubic-bezier(0.23,1,0.32,1)]">
-                    {content.topic}
-                  </CardTitle>
-                  <Badge className={`${getStatusColor(content.status)} text-white shrink-0 shadow-sm transition-all duration-[400ms] ease-[cubic-bezier(0.23,1,0.32,1)] group-hover:shadow-md group-hover:scale-105 will-change-transform`}>
-                    {content.status.replace('_', ' ')}
-                  </Badge>
+            <Card key={content.id} className="border border-slate-200/60 shadow-sm bg-white hover:shadow-xl transition-all duration-300 hover:-translate-y-1 overflow-hidden group">
+              {content.image_url ? (
+                <div
+                  className="relative w-full aspect-video overflow-hidden bg-slate-100 cursor-pointer"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setSelectedImage({ url: content.image_url!, topic: content.topic, prompt: content.image_prompt });
+                  }}
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={content.image_url} alt={content.topic} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-black/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+                  <div className="absolute top-3 left-3">
+                    <Badge className={`${getStatusColor(content.status)} text-white shadow`}>{content.status.replace('_', ' ')}</Badge>
+                  </div>
                 </div>
-                <CardDescription className="flex items-center gap-1 text-sm transition-colors duration-[400ms] ease-[cubic-bezier(0.23,1,0.32,1)] group-hover:text-slate-700">
-                  <span>Created</span>
-                  <span className="font-medium">{new Date(content.created_at).toLocaleDateString()}</span>
+              ) : (
+                <div className="w-full aspect-video bg-slate-50 border-b border-slate-100 flex items-center justify-center">
+                  <div className="flex items-center gap-2 text-slate-500"><ImageIcon className="h-5 w-5" /> No image</div>
+                </div>
+              )}
+              <CardHeader className="pb-2">
+                <CardTitle className="line-clamp-2 text-base group-hover:text-indigo-700 transition-colors">{content.topic}</CardTitle>
+                <CardDescription className="flex items-center justify-between">
+                  <span>Created <span className="font-medium">{new Date(content.created_at).toLocaleDateString()}</span></span>
+                  {platformIcons(content)}
                 </CardDescription>
               </CardHeader>
-              <CardContent className="space-y-4">
-                {content.image_url && (
-                  <div
-                    className="relative w-full aspect-video rounded-xl overflow-hidden bg-gradient-to-br from-slate-100 to-slate-200 shadow-md group-hover:shadow-xl transition-all duration-500 ease-[cubic-bezier(0.23,1,0.32,1)] cursor-pointer will-change-transform"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      if (content.image_url) {
-                        setSelectedImage({
-                          url: content.image_url,
-                          topic: content.topic,
-                          prompt: content.image_prompt
-                        });
-                      }
-                    }}
-                  >
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={content.image_url}
-                      alt={content.topic}
-                      className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500 ease-[cubic-bezier(0.23,1,0.32,1)] will-change-transform"
-                    />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-[400ms] ease-[cubic-bezier(0.23,1,0.32,1)] flex items-center justify-center">
-                      <div className="bg-white/90 backdrop-blur-sm p-3 rounded-full shadow-lg transform translate-y-4 group-hover:translate-y-0 transition-transform duration-[400ms] ease-[cubic-bezier(0.23,1,0.32,1)]">
-                        <Maximize2 className="h-5 w-5 text-slate-700" />
-                      </div>
-                    </div>
-                  </div>
-                )}
+              <CardContent className="pt-2">
                 <div className="flex gap-2">
                   <Button
                     variant="outline"
                     size="sm"
-                    className="flex-1 hover:bg-indigo-50 hover:border-indigo-300 hover:text-indigo-700 transition-all duration-[400ms] ease-[cubic-bezier(0.23,1,0.32,1)] rounded-lg hover:shadow-md hover:-translate-y-0.5 group/btn will-change-transform"
+                    className="flex-1 hover:border-indigo-300 hover:text-indigo-700"
                     onClick={() => router.push(`/dashboard/content/${content.id}`)}
                   >
-                    <Eye className="mr-2 h-4 w-4 transition-transform duration-[400ms] ease-[cubic-bezier(0.23,1,0.32,1)] group-hover/btn:scale-110 will-change-transform" />
-                    View Details
+                    <Eye className="mr-2 h-4 w-4" />
+                    Details
                   </Button>
                   {content.status === 'approved' && (
                     <Button
                       size="sm"
                       className="flex-1"
-                      onClick={() => router.push('/dashboard/posts')}
+                      onClick={() => { setPublishContent(content); setPublishOpen(true); }}
                     >
                       <Send className="mr-2 h-4 w-4" />
-                      View Posts
+                      Publish
                     </Button>
                   )}
                   <Button
                     variant="ghost"
                     size="sm"
                     onClick={() => handleDelete(content.id)}
-                    className="hover:bg-red-50 hover:text-red-600 transition-all duration-[400ms] ease-[cubic-bezier(0.23,1,0.32,1)] rounded-lg hover:shadow-md hover:-translate-y-0.5 group/btn will-change-transform"
+                    className="hover:bg-red-50 hover:text-red-600"
+                    title="Delete"
                   >
-                    <Trash2 className="h-4 w-4 transition-transform duration-[400ms] ease-[cubic-bezier(0.23,1,0.32,1)] group-hover/btn:scale-110 group-hover/btn:rotate-12 will-change-transform" />
+                    <Trash2 className="h-4 w-4" />
                   </Button>
                 </div>
               </CardContent>
@@ -249,6 +254,10 @@ export default function ContentPage() {
           </div>
         </DialogContent>
       </Dialog>
+      {/* Publish Dialog */}
+      {publishContent ? (
+        <PublishDialog open={publishOpen} onOpenChange={(o) => setPublishOpen(o)} content={publishContent} />
+      ) : null}
     </div>
   );
 }

@@ -5,10 +5,12 @@ import { useParams, useRouter } from 'next/navigation';
 import { contentAPI } from '@/lib/api';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/components/ui/use-toast';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { X, Maximize2 } from 'lucide-react';
+import { Dialog, DialogContent } from '@/components/ui/dialog';
+import { X, Maximize2, Send, Facebook, Instagram, Linkedin, Twitter, Image as ImageIcon } from 'lucide-react';
 import type { Content } from '@/types';
+import PublishDialog from '@/components/content/publish-dialog';
 
 export default function ContentDetailPage() {
     const params = useParams();
@@ -17,6 +19,7 @@ export default function ContentDetailPage() {
     const [content, setContent] = useState<Content | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [isImageModalOpen, setIsImageModalOpen] = useState(false);
+    const [publishOpen, setPublishOpen] = useState(false);
 
     const fetchContent = useCallback(async (id: string) => {
         try {
@@ -63,18 +66,42 @@ export default function ContentDetailPage() {
         );
     }
 
+    const platformIcons = () => (
+        <div className="flex items-center gap-2">
+            {[{ icon: Facebook, active: !!content.facebook_caption, color: 'text-blue-600' },
+            { icon: Instagram, active: !!content.instagram_caption, color: 'text-pink-600' },
+            { icon: Linkedin, active: !!content.linkedin_caption, color: 'text-blue-700' },
+            { icon: Twitter, active: !!content.twitter_caption, color: 'text-slate-900' }].map((p, idx) => (
+                <div key={idx} className={`p-1.5 rounded-md ${p.active ? 'bg-white shadow-sm' : 'opacity-40'}`}>
+                    <p.icon className={`h-4 w-4 ${p.active ? p.color : 'text-slate-500'}`} />
+                </div>
+            ))}
+        </div>
+    );
+
     return (
         <div className="space-y-6">
-            <div className="flex items-center justify-between">
+            <div className="flex items-start justify-between gap-4">
                 <div>
-                    <h1 className="text-3xl font-bold text-gray-900 tracking-tight">{content.topic}</h1>
-                    <p className="text-gray-600 mt-1">Created on {new Date(content.created_at).toLocaleDateString()}</p>
+                    <h1 className="text-3xl font-bold text-gray-900 tracking-tight flex items-center gap-3">
+                        {content.topic}
+                        <Badge className="capitalize">{content.status.replace('_', ' ')}</Badge>
+                    </h1>
+                    <p className="text-gray-600 mt-1 flex items-center gap-3">
+                        <span>Created {new Date(content.created_at).toLocaleDateString()}</span>
+                        {platformIcons()}
+                    </p>
                 </div>
                 <div className="flex gap-2">
+                    {content.status === 'approved' && (
+                        <Button onClick={() => setPublishOpen(true)}>
+                            <Send className="h-4 w-4 mr-2" /> Publish
+                        </Button>
+                    )}
                     <Button
                         variant="outline"
                         onClick={() => router.push('/dashboard/content')}
-                        className="hover:bg-gray-50 hover:border-gray-300 hover:shadow-md transition-all duration-[400ms] ease-[cubic-bezier(0.23,1,0.32,1)] hover:-translate-y-0.5"
+                        className="hover:bg-gray-50 hover:border-gray-300"
                     >
                         Back to Library
                     </Button>
@@ -83,60 +110,71 @@ export default function ContentDetailPage() {
 
             <div className="grid gap-6 lg:grid-cols-2">
                 {/* Image Card */}
-                {content.image_url && (
-                    <Card className="border-0 shadow-lg bg-white/80 backdrop-blur-sm hover:shadow-2xl transition-all duration-[400ms] ease-[cubic-bezier(0.23,1,0.32,1)] hover:-translate-y-2">
-                        <CardHeader>
-                            <CardTitle>Generated Image</CardTitle>
-                            <CardDescription>Click to view full size</CardDescription>
-                        </CardHeader>
-                        <CardContent>
+                <Card className="border border-slate-200/60 shadow-sm bg-white overflow-hidden">
+                    <CardHeader className="pb-2">
+                        <CardTitle>Generated Image</CardTitle>
+                        <CardDescription>
+                            {content.image_url ? 'Click to view full size' : 'No image available'}
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        {content.image_url ? (
                             <div
-                                className="relative w-full aspect-video rounded-lg overflow-hidden bg-gradient-to-br from-slate-100 to-slate-200 shadow-md group cursor-pointer"
+                                className="relative w-full aspect-video rounded-lg overflow-hidden bg-slate-100 group cursor-pointer"
                                 onClick={() => setIsImageModalOpen(true)}
                             >
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
                                 <img
                                     src={content.image_url}
                                     alt={content.topic}
-                                    className="w-full h-full object-cover transition-transform duration-500 ease-[cubic-bezier(0.23,1,0.32,1)] group-hover:scale-110"
+                                    className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
                                 />
-                                <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-[400ms] ease-[cubic-bezier(0.23,1,0.32,1)] flex items-center justify-center">
-                                    <div className="bg-white/90 backdrop-blur-sm p-3 rounded-full shadow-lg transform translate-y-4 group-hover:translate-y-0 transition-transform duration-[400ms] ease-[cubic-bezier(0.23,1,0.32,1)]">
+                                <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-black/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+                                <div className="absolute top-3 left-3">
+                                    <Badge className="capitalize">{content.status.replace('_', ' ')}</Badge>
+                                </div>
+                                <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <div className="bg-white/90 backdrop-blur-sm p-3 rounded-full shadow">
                                         <Maximize2 className="h-6 w-6 text-slate-700" />
                                     </div>
                                 </div>
                             </div>
-                            {content.image_prompt && (
-                                <div className="mt-4 p-3 bg-indigo-50 rounded-lg border border-indigo-100 hover:bg-indigo-100 hover:border-indigo-200 transition-all duration-[400ms] ease-[cubic-bezier(0.23,1,0.32,1)]">
-                                    <p className="text-xs font-semibold text-indigo-900 mb-1">Image Prompt</p>
-                                    <p className="text-sm text-indigo-700">{content.image_prompt}</p>
-                                </div>
-                            )}
-                        </CardContent>
-                    </Card>
-                )}
+                        ) : (
+                            <div className="w-full aspect-video bg-slate-50 border border-slate-200 rounded-lg flex items-center justify-center">
+                                <div className="flex items-center gap-2 text-slate-500"><ImageIcon className="h-5 w-5" /> No image</div>
+                            </div>
+                        )}
+                        {content.image_prompt && (
+                            <div className="mt-4 p-3 bg-indigo-50 rounded-lg border border-indigo-100">
+                                <p className="text-xs font-semibold text-indigo-900 mb-1">Image Prompt</p>
+                                <p className="text-sm text-indigo-700">{content.image_prompt}</p>
+                            </div>
+                        )}
+                    </CardContent>
+                </Card>
 
-                {/* Content Details Card */}
-                <Card className="border-0 shadow-lg bg-white/80 backdrop-blur-sm hover:shadow-2xl transition-all duration-[400ms] ease-[cubic-bezier(0.23,1,0.32,1)] hover:-translate-y-2">
+                {/* Captions Card */}
+                <Card className="border border-slate-200/60 shadow-sm bg-white">
                     <CardHeader>
-                        <CardTitle>Content Details</CardTitle>
-                        <CardDescription>Status: <span className="font-semibold capitalize">{content.status.replace('_', ' ')}</span></CardDescription>
+                        <CardTitle>Platform Captions</CardTitle>
+                        <CardDescription>Copy-ready captions for each platform</CardDescription>
                     </CardHeader>
-                    <CardContent className="space-y-4">
-                        <div className="p-4 bg-blue-50 rounded-lg border border-blue-100 hover:bg-blue-100 hover:border-blue-200 hover:shadow-md transition-all duration-[400ms] ease-[cubic-bezier(0.23,1,0.32,1)] hover:-translate-y-0.5 cursor-pointer">
-                            <p className="text-xs font-semibold text-blue-900 mb-2">Facebook</p>
-                            <p className="text-sm text-blue-700">{content.facebook_caption}</p>
+                    <CardContent className="space-y-3">
+                        <div className="p-4 bg-blue-50 rounded-lg border border-blue-100">
+                            <p className="text-xs font-semibold text-blue-900 mb-2 flex items-center gap-2"><Facebook className="h-4 w-4" /> Facebook</p>
+                            <p className="text-sm text-blue-700 whitespace-pre-wrap">{content.facebook_caption || 'No caption'}</p>
                         </div>
-                        <div className="p-4 bg-pink-50 rounded-lg border border-pink-100 hover:bg-pink-100 hover:border-pink-200 hover:shadow-md transition-all duration-[400ms] ease-[cubic-bezier(0.23,1,0.32,1)] hover:-translate-y-0.5 cursor-pointer">
-                            <p className="text-xs font-semibold text-pink-900 mb-2">Instagram</p>
-                            <p className="text-sm text-pink-700">{content.instagram_caption}</p>
+                        <div className="p-4 bg-pink-50 rounded-lg border border-pink-100">
+                            <p className="text-xs font-semibold text-pink-900 mb-2 flex items-center gap-2"><Instagram className="h-4 w-4" /> Instagram</p>
+                            <p className="text-sm text-pink-700 whitespace-pre-wrap">{content.instagram_caption || 'No caption'}</p>
                         </div>
-                        <div className="p-4 bg-indigo-50 rounded-lg border border-indigo-100 hover:bg-indigo-100 hover:border-indigo-200 hover:shadow-md transition-all duration-[400ms] ease-[cubic-bezier(0.23,1,0.32,1)] hover:-translate-y-0.5 cursor-pointer">
-                            <p className="text-xs font-semibold text-indigo-900 mb-2">LinkedIn</p>
-                            <p className="text-sm text-indigo-700">{content.linkedin_caption}</p>
+                        <div className="p-4 bg-indigo-50 rounded-lg border border-indigo-100">
+                            <p className="text-xs font-semibold text-indigo-900 mb-2 flex items-center gap-2"><Linkedin className="h-4 w-4" /> LinkedIn</p>
+                            <p className="text-sm text-indigo-700 whitespace-pre-wrap">{content.linkedin_caption || 'No caption'}</p>
                         </div>
-                        <div className="p-4 bg-sky-50 rounded-lg border border-sky-100 hover:bg-sky-100 hover:border-sky-200 hover:shadow-md transition-all duration-[400ms] ease-[cubic-bezier(0.23,1,0.32,1)] hover:-translate-y-0.5 cursor-pointer">
-                            <p className="text-xs font-semibold text-sky-900 mb-2">Twitter</p>
-                            <p className="text-sm text-sky-700">{content.twitter_caption}</p>
+                        <div className="p-4 bg-sky-50 rounded-lg border border-sky-100">
+                            <p className="text-xs font-semibold text-sky-900 mb-2 flex items-center gap-2"><Twitter className="h-4 w-4" /> Twitter</p>
+                            <p className="text-sm text-sky-700 whitespace-pre-wrap">{content.twitter_caption || 'No caption'}</p>
                         </div>
                     </CardContent>
                 </Card>
@@ -149,19 +187,29 @@ export default function ContentDetailPage() {
                         <Button
                             variant="ghost"
                             size="icon"
-                            className="absolute top-4 right-4 z-10 bg-white/10 hover:bg-white/20 backdrop-blur-sm text-white rounded-full w-10 h-10 transition-all duration-[400ms] ease-[cubic-bezier(0.23,1,0.32,1)] hover:scale-110 hover:rotate-90"
+                            className="absolute top-4 right-4 z-10 bg-white/10 hover:bg-white/20 backdrop-blur-sm text-white rounded-full w-10 h-10"
                             onClick={() => setIsImageModalOpen(false)}
                         >
                             <X className="h-5 w-5" />
                         </Button>
-                        <img
-                            src={content.image_url}
-                            alt={content.topic}
-                            className="max-w-full max-h-full object-contain rounded-lg shadow-2xl animate-in fade-in zoom-in-95 duration-500"
-                        />
+                        {content.image_url ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                                src={content.image_url}
+                                alt={content.topic}
+                                className="max-w-full max-h-full object-contain rounded-lg shadow-2xl"
+                            />
+                        ) : (
+                            <div className="text-white/80">No image available</div>
+                        )}
                     </div>
                 </DialogContent>
             </Dialog>
+
+            {/* Publish Dialog */}
+            {content.status === 'approved' && (
+                <PublishDialog open={publishOpen} onOpenChange={setPublishOpen} content={content} />
+            )}
         </div>
     );
 }

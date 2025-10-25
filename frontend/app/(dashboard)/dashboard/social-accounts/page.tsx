@@ -5,9 +5,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { socialAccountsAPI } from '@/lib/api';
+import { socialAccountsAPI, oauthAPI } from '@/lib/api';
 import { useToast } from '@/components/ui/use-toast';
-import { Facebook, Instagram, Linkedin, Twitter, Plus, CheckCircle, AlertCircle, Trash2 } from 'lucide-react';
+import { Facebook, Instagram, Linkedin, Twitter, Plus, CheckCircle, AlertCircle, Trash2, RefreshCw } from 'lucide-react';
 import type { SocialAccount, PlatformType } from '@/types';
 import ConnectAccountDialog from '@/components/social-accounts/connect-account-dialog';
 
@@ -22,11 +22,30 @@ export default function SocialAccountsPage() {
   const [availablePlatforms, setAvailablePlatforms] = useState<Platform[]>([]);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [selectedPlatform, setSelectedPlatform] = useState<string | undefined>(undefined);
+  const [verifyingAccounts, setVerifyingAccounts] = useState<Set<number>>(new Set());
 
   useEffect(() => {
     fetchAccounts();
     fetchPlatforms();
-  }, []);
+    // On callback, show toast and refresh
+    try {
+      const url = new URL(window.location.href);
+      const connected = url.searchParams.get('connected');
+      const status = url.searchParams.get('status');
+      if (connected && status) {
+        if (status === 'success') {
+          toast({ title: 'Account connected', description: `Successfully connected ${connected}` });
+          fetchAccounts();
+        } else {
+          toast({ title: 'Connection failed', description: `Failed to connect ${connected}`, variant: 'destructive' });
+        }
+        // Clean params
+        url.searchParams.delete('connected');
+        url.searchParams.delete('status');
+        window.history.replaceState({}, '', url.toString());
+      }
+    } catch { }
+  }, [toast]);
 
   const fetchAccounts = async () => {
     try {
@@ -66,6 +85,57 @@ export default function SocialAccountsPage() {
         title: 'Disconnect failed',
         description: errorMessage,
         variant: 'destructive',
+      });
+    }
+  };
+
+  const handleVerify = async (accountId: number) => {
+    setVerifyingAccounts((prev) => new Set(prev).add(accountId));
+
+    try {
+      const response = await socialAccountsAPI.verify(accountId);
+      const result = response.data;
+
+      if (result.valid) {
+        toast({
+          title: 'Connection verified ✓',
+          description: result.message || 'Your account connection is active and working',
+        });
+
+        // Update account status if needed
+        setAccounts((prev) =>
+          prev.map((acc) =>
+            acc.id === accountId ? { ...acc, is_active: true } : acc
+          )
+        );
+      } else {
+        toast({
+          title: 'Connection invalid',
+          description: result.message || 'Please reconnect your account',
+          variant: 'destructive',
+        });
+
+        // Mark account as inactive
+        setAccounts((prev) =>
+          prev.map((acc) =>
+            acc.id === accountId ? { ...acc, is_active: false } : acc
+          )
+        );
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error && 'response' in error
+        ? (error as { response?: { data?: { detail?: string } } }).response?.data?.detail || 'Failed to verify connection'
+        : 'Failed to verify connection';
+      toast({
+        title: 'Verification failed',
+        description: errorMessage,
+        variant: 'destructive',
+      });
+    } finally {
+      setVerifyingAccounts((prev) => {
+        const next = new Set(prev);
+        next.delete(accountId);
+        return next;
       });
     }
   };
@@ -160,13 +230,30 @@ export default function SocialAccountsPage() {
                     <Button
                       variant={connected ? 'outline' : 'default'}
                       className="w-full mt-4"
-                      onClick={() => {
-                        setSelectedPlatform(platform.value);
-                        setIsDialogOpen(true);
+                      onClick={async () => {
+                        if (connected) return;
+                        // Prefer OAuth for LinkedIn; fall back to manual dialog for others
+                        if (platform.value === 'linkedin') {
+                          try {
+                            const { authorize_url } = await oauthAPI.getAuthorizeUrl('linkedin');
+                            window.location.href = authorize_url;
+                          } catch (error: unknown) {
+                            const errorMsg = (error as { response?: { data?: { detail?: string } } })?.response?.data?.detail || 'OAuth not configured. Please set LINKEDIN_CLIENT_ID and LINKEDIN_CLIENT_SECRET in backend/.env';
+                            toast({
+                              title: 'LinkedIn connect failed',
+                              description: errorMsg,
+                              variant: 'destructive'
+                            });
+                            console.error('LinkedIn OAuth error:', error);
+                          }
+                        } else {
+                          setSelectedPlatform(platform.value);
+                          setIsDialogOpen(true);
+                        }
                       }}
                       disabled={connected}
                     >
-                      {connected ? 'Connected' : 'Connect'}
+                      {connected ? 'Connected' : (platform.value === 'linkedin' ? 'Connect with LinkedIn' : 'Connect')}
                     </Button>
                   </CardContent>
                 </Card>
@@ -205,15 +292,43 @@ export default function SocialAccountsPage() {
                         <p className="text-sm text-gray-900">
                           {account.display_name || account.username || 'No username'}
                         </p>
-                        <p className="text-xs text-gray-700">
-                          Connected {new Date(account.connected_at).toLocaleDateString()}
-                        </p>
+                        <div className="flex items-center gap-2 mt-1">
+                          <p className="text-xs text-gray-700">
+                            Connected {new Date(account.connected_at).toLocaleDateString()}
+                          </p>
+                          {account.last_posted_at && (
+                            <>
+                              <span className="text-xs text-gray-400">•</span>
+                              <p className="text-xs text-gray-700">
+                                Last posted {new Date(account.last_posted_at).toLocaleDateString()}
+                              </p>
+                            </>
+                          )}
+                        </div>
                       </div>
                     </div>
                     <div className="flex items-center gap-3">
                       <Badge variant={account.is_active ? 'default' : 'secondary'}>
                         {account.is_active ? 'Active' : 'Inactive'}
                       </Badge>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleVerify(account.id)}
+                        disabled={verifyingAccounts.has(account.id)}
+                      >
+                        {verifyingAccounts.has(account.id) ? (
+                          <>
+                            <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                            Verifying...
+                          </>
+                        ) : (
+                          <>
+                            <RefreshCw className="h-4 w-4 mr-2" />
+                            Test
+                          </>
+                        )}
+                      </Button>
                       <Button
                         variant="ghost"
                         size="icon"

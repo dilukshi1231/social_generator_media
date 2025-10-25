@@ -200,13 +200,12 @@ export default function CreateContentPage() {
     }
   };
 
-  const handleApprove = async () => {
-    if (!generatedContent) return;
+  const handleApprove = async (): Promise<boolean> => {
+    if (!generatedContent) return false;
 
     try {
       console.log('[Approve] Saving content to database...', generatedContent);
 
-      // Import the contentAPI
       const { contentAPI } = await import('@/lib/api');
 
       // Save content to database with auto_approve=true
@@ -225,12 +224,16 @@ export default function CreateContentPage() {
 
       console.log('[Approve] Content saved successfully:', response.data);
 
+      // Update local state with saved/approved content so the dialog has accurate data
+      setGeneratedContent(response.data as Content);
+
       toast({
-        title: 'Content approved and saved!',
-        description: 'Your content has been saved to the database',
+        title: 'Content approved!',
+        description: 'Select platforms to publish your content',
       });
 
-      router.push('/dashboard/content');
+      // Do not navigate; allow ContentPreview to open the publish dialog
+      return true;
     } catch (error) {
       console.error('[Approve] Error saving content:', error);
       toast({
@@ -238,6 +241,7 @@ export default function CreateContentPage() {
         description: 'Please try again',
         variant: 'destructive',
       });
+      return false;
     }
   };
 
