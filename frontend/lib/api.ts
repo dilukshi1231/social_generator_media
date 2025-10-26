@@ -176,7 +176,17 @@ export const socialAccountsAPI = {
 
   disconnect: (id: number) => api.delete(`/api/v1/social-accounts/${id}`),
 
+  verify: (id: number) => api.post(`/api/v1/social-accounts/${id}/verify`),
+
   getAvailablePlatforms: () => api.get('/api/v1/social-accounts/platforms/available'),
+};
+
+// OAuth API
+export const oauthAPI = {
+  getAuthorizeUrl: async (platform: string) => {
+    const resp = await api.get(`/api/v1/oauth/${platform}/authorize`);
+    return resp.data as { authorize_url: string };
+  },
 };
 
 // Posts API

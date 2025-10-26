@@ -42,34 +42,36 @@ class SocialAccountResponse(BaseModel):
     is_connected: bool
     connected_at: datetime
     last_posted_at: Optional[datetime]
-    
+
     class Config:
         from_attributes = True
 
 
-@router.post("/", response_model=SocialAccountResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/", response_model=SocialAccountResponse, status_code=status.HTTP_201_CREATED
+)
 async def connect_social_account(
     account_data: SocialAccountCreate,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ):
     """Connect a new social media account."""
-    
+
     # Check if account already exists
     result = await db.execute(
         select(SocialAccount).where(
             SocialAccount.user_id == current_user.id,
-            SocialAccount.platform == account_data.platform
+            SocialAccount.platform == account_data.platform,
         )
     )
     existing_account = result.scalar_one_or_none()
-    
+
     if existing_account:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"{account_data.platform} account already connected"
+            detail=f"{account_data.platform} account already connected",
         )
-    
+
     # Create new social account
     new_account = SocialAccount(
         user_id=current_user.id,
@@ -81,13 +83,13 @@ async def connect_social_account(
         refresh_token=account_data.refresh_token,
         platform_data=account_data.platform_data or {},
         is_active=True,
-        is_connected=True
+        is_connected=True,
     )
-    
+
     db.add(new_account)
     await db.commit()
     await db.refresh(new_account)
-    
+
     return new_account
 
 
@@ -96,22 +98,22 @@ async def list_social_accounts(
     platform: Optional[PlatformType] = None,
     active_only: bool = False,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ):
     """List all connected social media accounts."""
     query = select(SocialAccount).where(SocialAccount.user_id == current_user.id)
-    
+
     if platform:
         query = query.where(SocialAccount.platform == platform)
-    
+
     if active_only:
         query = query.where(SocialAccount.is_active == True)
-    
+
     query = query.order_by(SocialAccount.connected_at.desc())
-    
+
     result = await db.execute(query)
     accounts = result.scalars().all()
-    
+
     return accounts
 
 
@@ -119,23 +121,21 @@ async def list_social_accounts(
 async def get_social_account(
     account_id: int,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ):
     """Get specific social media account."""
     result = await db.execute(
         select(SocialAccount).where(
-            SocialAccount.id == account_id,
-            SocialAccount.user_id == current_user.id
+            SocialAccount.id == account_id, SocialAccount.user_id == current_user.id
         )
     )
     account = result.scalar_one_or_none()
-    
+
     if not account:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Social account not found"
+            status_code=status.HTTP_404_NOT_FOUND, detail="Social account not found"
         )
-    
+
     return account
 
 
@@ -144,39 +144,37 @@ async def update_social_account(
     account_id: int,
     update_data: SocialAccountUpdate,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ):
     """Update social media account details."""
     result = await db.execute(
         select(SocialAccount).where(
-            SocialAccount.id == account_id,
-            SocialAccount.user_id == current_user.id
+            SocialAccount.id == account_id, SocialAccount.user_id == current_user.id
         )
     )
     account = result.scalar_one_or_none()
-    
+
     if not account:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Social account not found"
+            status_code=status.HTTP_404_NOT_FOUND, detail="Social account not found"
         )
-    
+
     # Update fields
     if update_data.access_token is not None:
         account.access_token = update_data.access_token
-    
+
     if update_data.refresh_token is not None:
         account.refresh_token = update_data.refresh_token
-    
+
     if update_data.is_active is not None:
         account.is_active = update_data.is_active
-    
+
     if update_data.platform_data is not None:
         account.platform_data = update_data.platform_data
-    
+
     await db.commit()
     await db.refresh(account)
-    
+
     return account
 
 
@@ -184,26 +182,24 @@ async def update_social_account(
 async def disconnect_social_account(
     account_id: int,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ):
     """Disconnect/delete a social media account."""
     result = await db.execute(
         select(SocialAccount).where(
-            SocialAccount.id == account_id,
-            SocialAccount.user_id == current_user.id
+            SocialAccount.id == account_id, SocialAccount.user_id == current_user.id
         )
     )
     account = result.scalar_one_or_none()
-    
+
     if not account:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Social account not found"
+            status_code=status.HTTP_404_NOT_FOUND, detail="Social account not found"
         )
-    
+
     await db.delete(account)
     await db.commit()
-    
+
     return None
 
 
@@ -211,29 +207,27 @@ async def disconnect_social_account(
 async def refresh_account_token(
     account_id: int,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ):
     """Refresh access token for a social media account."""
     result = await db.execute(
         select(SocialAccount).where(
-            SocialAccount.id == account_id,
-            SocialAccount.user_id == current_user.id
+            SocialAccount.id == account_id, SocialAccount.user_id == current_user.id
         )
     )
     account = result.scalar_one_or_none()
-    
+
     if not account:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Social account not found"
+            status_code=status.HTTP_404_NOT_FOUND, detail="Social account not found"
         )
-    
+
     # TODO: Implement platform-specific token refresh logic
     # This would call the respective OAuth provider's token refresh endpoint
-    
+
     raise HTTPException(
         status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="Token refresh not yet implemented for this platform"
+        detail="Token refresh not yet implemented for this platform",
     )
 
 
@@ -246,31 +240,96 @@ async def get_available_platforms():
                 "name": "Facebook",
                 "value": "facebook",
                 "icon": "facebook",
-                "color": "#1877F2"
+                "color": "#1877F2",
             },
             {
                 "name": "Instagram",
                 "value": "instagram",
                 "icon": "instagram",
-                "color": "#E4405F"
+                "color": "#E4405F",
             },
             {
                 "name": "LinkedIn",
                 "value": "linkedin",
                 "icon": "linkedin",
-                "color": "#0A66C2"
+                "color": "#0A66C2",
             },
             {
                 "name": "Twitter / X",
                 "value": "twitter",
                 "icon": "twitter",
-                "color": "#000000"
+                "color": "#000000",
             },
-            {
-                "name": "TikTok",
-                "value": "tiktok",
-                "icon": "tiktok",
-                "color": "#000000"
-            }
+            {"name": "TikTok", "value": "tiktok", "icon": "tiktok", "color": "#000000"},
         ]
     }
+
+
+@router.post("/{account_id}/verify", response_model=dict)
+async def verify_account_connection(
+    account_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Verify if the social media account connection is still valid."""
+    import httpx
+
+    result = await db.execute(
+        select(SocialAccount).where(
+            SocialAccount.id == account_id, SocialAccount.user_id == current_user.id
+        )
+    )
+    account = result.scalar_one_or_none()
+
+    if not account:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Social account not found"
+        )
+
+    # Verify based on platform
+    try:
+        if account.platform == PlatformType.LINKEDIN:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                # Test the token by fetching user info
+                response = await client.get(
+                    "https://api.linkedin.com/v2/userinfo",
+                    headers={"Authorization": f"Bearer {account.access_token}"},
+                )
+                response.raise_for_status()
+                user_info = response.json()
+
+                return {
+                    "valid": True,
+                    "platform": account.platform,
+                    "user_id": user_info.get("sub"),
+                    "name": user_info.get("name"),
+                    "message": "Connection is active and valid",
+                }
+
+        # Add verification for other platforms as needed
+        else:
+            return {
+                "valid": True,
+                "platform": account.platform,
+                "message": "Verification not implemented for this platform",
+            }
+
+    except httpx.HTTPStatusError as e:
+        if e.response.status_code == 401:
+            # Token is invalid or expired
+            account.is_active = False
+            await db.commit()
+            return {
+                "valid": False,
+                "platform": account.platform,
+                "message": "Token expired or invalid. Please reconnect your account.",
+            }
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Failed to verify connection: {str(e)}",
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error verifying connection: {str(e)}",
+        )

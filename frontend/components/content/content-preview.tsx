@@ -13,7 +13,8 @@ import PublishDialog from '@/components/content/publish-dialog';
 
 interface ContentPreviewProps {
   content: Content;
-  onApprove?: () => void;
+  // Return boolean to indicate success; supports async handlers
+  onApprove?: () => Promise<boolean | void> | boolean | void;
   onReject: () => void;
   onRegenerateCaptions: () => void;
   onRegenerateImage: () => void;
@@ -31,9 +32,12 @@ export default function ContentPreview({
   const { toast } = useToast();
   const [publishDialogOpen, setPublishDialogOpen] = useState(false);
 
-  const handleApproveAndPublish = () => {
+  const handleApproveAndPublish = async () => {
     if (onApprove) {
-      onApprove();
+      const result = await onApprove();
+      if (result === false) {
+        return; // Abort opening dialog on failure
+      }
     }
     setPublishDialogOpen(true);
   };

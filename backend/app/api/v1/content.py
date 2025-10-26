@@ -7,8 +7,8 @@ from datetime import datetime
 from app.database import get_db
 from app.models.user import User
 from app.models.content import Content, ContentStatus
-from app.models.social_account import SocialAccount
-from app.models.post import Post, PostStatus as PostStatusEnum
+
+# Note: Posting is handled via posts API; no need to import SocialAccount/Post here
 from app.api.v1.auth import get_current_user
 from app.services.content_generator import ContentGeneratorService
 from pydantic import BaseModel
@@ -237,46 +237,10 @@ async def approve_content(
         )
 
     if approval.approved:
+        # Mark as approved only; posting will be handled explicitly via /posts
         content.status = ContentStatus.APPROVED
         content.approved_at = datetime.utcnow()
         content.approved_by = current_user.id
-        # Create Post records for each connected & active social account
-        # Query active social accounts for user
-        accounts_result = await db.execute(
-            select(SocialAccount).where(
-                SocialAccount.user_id == current_user.id,
-                SocialAccount.is_active == True,
-                SocialAccount.is_connected == True,
-            )
-        )
-        accounts = accounts_result.scalars().all()
-
-        # Map content captions to platform-specific captions
-        platform_caption_map = {
-            "facebook": content.facebook_caption,
-            "instagram": content.instagram_caption,
-            "linkedin": content.linkedin_caption,
-            "twitter": content.twitter_caption,
-            "threads": content.threads_caption,
-        }
-
-        for acct in accounts:
-            # Determine caption for this platform
-            caption = (
-                platform_caption_map.get(acct.platform.value, content.facebook_caption)
-                or ""
-            )
-
-            new_post = Post(
-                user_id=current_user.id,
-                content_id=content.id,
-                social_account_id=acct.id,
-                platform=acct.platform,
-                caption=caption,
-                image_url=content.image_url,
-                status=PostStatusEnum.SCHEDULED,
-            )
-            db.add(new_post)
     else:
         content.status = ContentStatus.REJECTED
         if approval.feedback:

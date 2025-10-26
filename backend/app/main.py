@@ -14,7 +14,8 @@ from app.api.v1 import (
     content,
     social_accounts,
     posts,
-)  # ADD social_accounts and posts
+)
+from app.api.v1 import oauth as oauth_routes
 
 
 @asynccontextmanager
@@ -83,6 +84,9 @@ app.include_router(
     social_accounts.router, prefix="/api/v1/social-accounts", tags=["Social Accounts"]
 )  # ADD THIS
 app.include_router(posts.router, prefix="/api/v1/posts", tags=["Posts"])  # ADD THIS
+app.include_router(
+    oauth_routes.router, prefix="/api/v1/oauth", tags=["OAuth"]
+)  # New OAuth routes
 
 # Mount static files for serving uploaded images
 app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
