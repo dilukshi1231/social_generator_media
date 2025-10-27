@@ -118,29 +118,30 @@ export default function CreateContentPage() {
       const data = await response.json();
       console.log('[Webhook] Raw response data:', data);
 
-      // Parse the markdown-wrapped JSON
-      let parsedData;
-      if (data.text) {
-        console.log('[Webhook] Response has .text property, attempting to parse...');
-        const jsonMatch = data.text.match(/```json\n([\s\S]*?)\n```/);
-        if (jsonMatch) {
-          parsedData = JSON.parse(jsonMatch[1]);
-          console.log('[Webhook] Parsed JSON from markdown:', parsedData);
-        } else {
-          console.error('[Webhook] Could not extract JSON from markdown');
-          throw new Error('Invalid response format from webhook');
-        }
-      } else {
-        parsedData = data;
-        console.log('[Webhook] Using data directly (no .text wrapper)');
-      }
+      // Extract data from the new nested structure
+      const imagePrompt = data.image_generation_prompt || '';
+      const captions = data.social_media_captions || {};
+
+      // Map captions to our expected format
+      const facebookCaption = captions.facebook || '';
+      const instagramCaption = captions.instagram || '';
+      const linkedinCaption = captions.linkedin || '';
+      const twitterCaption = captions.twitter || '';
+      const tiktokCaption = captions.tiktok || '';
+
+      console.log('[Webhook] Extracted data:', {
+        image_prompt: imagePrompt?.substring(0, 50) + '...',
+        has_facebook: !!facebookCaption,
+        has_instagram: !!instagramCaption,
+        has_linkedin: !!linkedinCaption,
+      });
 
       // Step 2: Generate image using the prompt from webhook
       let imageUrl: string | undefined;
-      if (parsedData.prompt) {
+      if (imagePrompt) {
         console.log('[Image] Starting image generation...');
         try {
-          imageUrl = await generateImage(parsedData.prompt);
+          imageUrl = await generateImage(imagePrompt);
           console.log('[Image] Image URL created:', imageUrl);
         } catch (imageError) {
           console.error('[Image] Image generation failed, continuing without image:', imageError);
@@ -152,13 +153,13 @@ export default function CreateContentPage() {
       const content: Content = {
         id: 0, // Temporary ID since webhook doesn't provide one
         topic: topic.trim(),
-        facebook_caption: parsedData.facebook_caption || '',
-        instagram_caption: parsedData.instagram_caption || '',
-        linkedin_caption: parsedData.linkedin_caption || '',
-        twitter_caption: parsedData.x_tweet || '', // Map x_tweet to twitter_caption
-        threads_caption: parsedData.threads_caption || '',
-        pinterest_caption: parsedData.pinterest_caption || '',
-        image_prompt: parsedData.prompt || '',
+        facebook_caption: facebookCaption,
+        instagram_caption: instagramCaption,
+        linkedin_caption: linkedinCaption,
+        twitter_caption: twitterCaption,
+        threads_caption: tiktokCaption,
+        pinterest_caption: '', // Not in new format
+        image_prompt: imagePrompt,
         image_url: imageUrl,
         status: 'pending_approval',
         created_at: new Date().toISOString(),
@@ -282,11 +283,28 @@ export default function CreateContentPage() {
       const parsedData = await webhookResponse.json();
       console.log('[Regenerate All] Webhook response:', parsedData);
 
+      // Extract data from the new nested structure
+      const imagePrompt = parsedData.image_generation_prompt || '';
+      const captions = parsedData.social_media_captions || {};
+
+      // Map captions to our expected format
+      const facebookCaption = captions.facebook || '';
+      const instagramCaption = captions.instagram || '';
+      const linkedinCaption = captions.linkedin || '';
+      const twitterCaption = captions.twitter || '';
+      const tiktokCaption = captions.tiktok || '';
+
+      console.log('[Regenerate All] Extracted data:', {
+        image_prompt: imagePrompt?.substring(0, 50) + '...',
+        has_facebook: !!facebookCaption,
+        has_instagram: !!instagramCaption,
+      });
+
       // Step 2: Generate image from prompt using backend proxy
       let imageUrl = '';
-      if (parsedData.prompt) {
+      if (imagePrompt) {
         try {
-          imageUrl = await generateImage(parsedData.prompt);
+          imageUrl = await generateImage(imagePrompt);
           console.log('[Regenerate All] Image generated successfully:', imageUrl);
         } catch (imgError) {
           console.error('[Regenerate All] Image generation failed:', imgError);
@@ -296,13 +314,13 @@ export default function CreateContentPage() {
       // Step 3: Update Content object with new data
       const updatedContent: Content = {
         ...generatedContent,
-        facebook_caption: parsedData.facebook_caption || '',
-        instagram_caption: parsedData.instagram_caption || '',
-        linkedin_caption: parsedData.linkedin_caption || '',
-        twitter_caption: parsedData.x_tweet || '',
-        threads_caption: parsedData.threads_caption || '',
-        pinterest_caption: parsedData.pinterest_caption || '',
-        image_prompt: parsedData.prompt || generatedContent.image_prompt || '',
+        facebook_caption: facebookCaption,
+        instagram_caption: instagramCaption,
+        linkedin_caption: linkedinCaption,
+        twitter_caption: twitterCaption,
+        threads_caption: tiktokCaption,
+        pinterest_caption: '',
+        image_prompt: imagePrompt || generatedContent.image_prompt || '',
         image_url: imageUrl || generatedContent.image_url || '',
       };
 
@@ -456,7 +474,7 @@ export default function CreateContentPage() {
                 </p>
                 <ul className="text-sm text-indigo-700 space-y-2">
                   {[
-                    'Platform-specific captions (Facebook, Instagram, LinkedIn, Twitter, Threads)',
+                    'Platform-specific captions (Facebook, Instagram, LinkedIn, Twitter, TikTok)',
                     'Optimized image prompt for maximum engagement',
                     'AI-generated professional image'
                   ].map((item, index) => (

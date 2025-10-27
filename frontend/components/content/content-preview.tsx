@@ -76,7 +76,7 @@ export default function ContentPreview({
       borderColor: 'border-slate-200',
     },
     {
-      name: 'Threads',
+      name: 'TikTok',
       icon: Twitter,
       caption: content.threads_caption,
       color: 'text-gray-900',

@@ -69,36 +69,71 @@ export default function CreateContentPage() {
       setWebhookRaw(webhookData);
       setIsWebhookLoading(false);
 
-      // Extract data from webhook response
-      const {
-        image_prompt,
-        image_url,
-        facebook_caption,
-        instagram_caption,
-        linkedin_caption,
-        pinterest_caption,
-        twitter_caption,
-        threads_caption,
-      } = webhookData;
+      // Extract data from the new nested structure
+      const imagePrompt = webhookData.image_generation_prompt || '';
+      const captions = webhookData.social_media_captions || {};
+
+      // Map captions to our expected format
+      const facebookCaption = captions.facebook || '';
+      const instagramCaption = captions.instagram || '';
+      const linkedinCaption = captions.linkedin || '';
+      const twitterCaption = captions.twitter || '';
+      const threadsCaption = captions.threads || '';
 
       console.log('[Generate] Extracted data:', {
-        image_prompt,
-        image_url: image_url?.substring(0, 50) + '...',
-        has_facebook: !!facebook_caption,
-        has_instagram: !!instagram_caption,
+        image_prompt: imagePrompt?.substring(0, 50) + '...',
+        has_facebook: !!facebookCaption,
+        has_instagram: !!instagramCaption,
+        has_linkedin: !!linkedinCaption,
       });
+
+      // Generate image from the prompt if we have one
+      let imageUrl = '';
+      if (imagePrompt) {
+        try {
+          console.log('[Image] Generating image from prompt...');
+          const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+          const proxyUrl = `${apiUrl}/api/v1/content/generate-image-proxy`;
+          const token = localStorage.getItem('access_token');
+
+          if (!token) {
+            console.error('[Image] No access token found');
+            throw new Error('Authentication required');
+          }
+
+          const imgResponse = await fetch(proxyUrl, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ prompt: imagePrompt }),
+          });
+
+          if (imgResponse.ok) {
+            const imgData = await imgResponse.json();
+            imageUrl = `${apiUrl}${imgData.image_url}`;
+            console.log('[Image] Image generated:', imageUrl);
+          } else {
+            console.error('[Image] Failed to generate image:', await imgResponse.text());
+          }
+        } catch (imgError) {
+          console.error('[Image] Error generating image:', imgError);
+          // Continue without image
+        }
+      }
 
       // Create content in backend with webhook data
       const response = await contentAPI.create({
         topic: topic.trim(),
-        image_prompt: image_prompt || '',
-        image_url: image_url || '',
-        facebook_caption: facebook_caption || '',
-        instagram_caption: instagram_caption || '',
-        linkedin_caption: linkedin_caption || '',
-        pinterest_caption: pinterest_caption || '',
-        twitter_caption: twitter_caption || '',
-        threads_caption: threads_caption || '',
+        image_prompt: imagePrompt,
+        image_url: imageUrl,
+        facebook_caption: facebookCaption,
+        instagram_caption: instagramCaption,
+        linkedin_caption: linkedinCaption,
+        pinterest_caption: '', // Not in new format
+        twitter_caption: twitterCaption,
+        threads_caption: threadsCaption,
         auto_approve: false,
       });
 
@@ -243,36 +278,70 @@ export default function CreateContentPage() {
 
       setWebhookRaw(webhookData);
 
-      // Extract data from webhook response
-      const {
-        image_prompt,
-        image_url,
-        facebook_caption,
-        instagram_caption,
-        linkedin_caption,
-        pinterest_caption,
-        twitter_caption,
-        threads_caption,
-      } = webhookData;
+      // Extract data from the new nested structure
+      const imagePrompt = webhookData.image_generation_prompt || '';
+      const captions = webhookData.social_media_captions || {};
+
+      // Map captions to our expected format
+      const facebookCaption = captions.facebook || '';
+      const instagramCaption = captions.instagram || '';
+      const linkedinCaption = captions.linkedin || '';
+      const twitterCaption = captions.twitter || '';
+      const threadsCaption = captions.threads || '';
 
       console.log('[Regenerate All] Extracted data:', {
-        image_prompt,
-        image_url: image_url?.substring(0, 50) + '...',
-        has_facebook: !!facebook_caption,
-        has_instagram: !!instagram_caption,
+        image_prompt: imagePrompt?.substring(0, 50) + '...',
+        has_facebook: !!facebookCaption,
+        has_instagram: !!instagramCaption,
       });
+
+      // Generate image from the prompt if we have one
+      let imageUrl = generatedContent.image_url || '';
+      if (imagePrompt) {
+        try {
+          console.log('[Regenerate] Generating new image from prompt...');
+          const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+          const proxyUrl = `${apiUrl}/api/v1/content/generate-image-proxy`;
+          const token = localStorage.getItem('access_token');
+
+          if (!token) {
+            console.error('[Image] No access token found');
+            throw new Error('Authentication required');
+          }
+
+          const imgResponse = await fetch(proxyUrl, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ prompt: imagePrompt }),
+          });
+
+          if (imgResponse.ok) {
+            const imgData = await imgResponse.json();
+            imageUrl = `${apiUrl}${imgData.image_url}`;
+            console.log('[Regenerate] New image generated:', imageUrl);
+          } else {
+            console.error('[Regenerate] Failed to generate image:', await imgResponse.text());
+          }
+        } catch (imgError) {
+          console.error('[Regenerate] Error generating image:', imgError);
+          // Continue with existing image
+        }
+      }
 
       // Update the existing content with new data from n8n
       const response = await contentAPI.create({
         topic: topic.trim(),
-        image_prompt: image_prompt || generatedContent.image_prompt || '',
-        image_url: image_url || generatedContent.image_url || '',
-        facebook_caption: facebook_caption || '',
-        instagram_caption: instagram_caption || '',
-        linkedin_caption: linkedin_caption || '',
-        pinterest_caption: pinterest_caption || '',
-        twitter_caption: twitter_caption || '',
-        threads_caption: threads_caption || '',
+        image_prompt: imagePrompt || generatedContent.image_prompt || '',
+        image_url: imageUrl,
+        facebook_caption: facebookCaption,
+        instagram_caption: instagramCaption,
+        linkedin_caption: linkedinCaption,
+        pinterest_caption: '',
+        twitter_caption: twitterCaption,
+        threads_caption: threadsCaption,
         auto_approve: false,
       });
 
