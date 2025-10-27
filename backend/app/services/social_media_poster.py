@@ -3,9 +3,6 @@ import base64
 from typing import Dict, List, Optional
 from datetime import datetime
 import tweepy
-from instagrapi import Client as InstaClient
-import io
-from PIL import Image
 import os
 
 
@@ -41,14 +38,22 @@ class SocialMediaPosterService:
 
         async with httpx.AsyncClient(timeout=60.0) as client:
             if image_bytes:
-                # Post with image
+                # Post with image (only visible to owner)
                 files = {"source": ("image.png", image_bytes, "image/png")}
-                data = {"message": caption, "access_token": access_token}
+                data = {
+                    "message": caption,
+                    "access_token": access_token,
+                    "privacy": '{"value":"SELF"}',  # Only owner can see
+                }
                 response = await client.post(url, data=data, files=files)
             else:
-                # Post text only
+                # Post text only (only visible to owner)
                 url = f"https://graph.facebook.com/v18.0/{page_id}/feed"
-                data = {"message": caption, "access_token": access_token}
+                data = {
+                    "message": caption,
+                    "access_token": access_token,
+                    "privacy": '{"value":"SELF"}',  # Only owner can see
+                }
                 response = await client.post(url, data=data)
 
             response.raise_for_status()
@@ -56,39 +61,61 @@ class SocialMediaPosterService:
 
     async def post_to_instagram(
         self,
-        username: str,
-        password: str,
+        access_token: str,
+        instagram_business_account_id: str,
         caption: str,
-        image_bytes: bytes,
+        image_url: str,
     ) -> Dict:
         """
-        Post content to Instagram.
+        Post content to Instagram Business Account using Graph API.
 
         Args:
-            username: Instagram username
-            password: Instagram password
+            access_token: Instagram/Facebook page access token
+            instagram_business_account_id: Instagram Business Account ID
             caption: Post caption
-            image_base64: Base64 encoded image
+            image_url: Publicly accessible image URL
 
         Returns:
             Response data
         """
         try:
-            # Initialize Instagram client
-            client = InstaClient()
-            client.login(username, password)
+            async with httpx.AsyncClient(timeout=60.0) as client:
+                # Step 1: Create media container
+                container_url = f"https://graph.facebook.com/v18.0/{instagram_business_account_id}/media"
+                container_params = {
+                    "image_url": image_url,
+                    "caption": caption,
+                    "access_token": access_token,
+                }
+                container_resp = await client.post(
+                    container_url, params=container_params
+                )
+                container_resp.raise_for_status()
+                container_data = container_resp.json()
+                creation_id = container_data.get("id")
 
-            # Use provided bytes
-            image = Image.open(io.BytesIO(image_bytes))
+                if not creation_id:
+                    return {
+                        "success": False,
+                        "error": "Failed to create media container",
+                        "platform": "instagram",
+                    }
 
-            # Save temporarily
-            temp_path = f"/tmp/instagram_{datetime.now().timestamp()}.png"
-            image.save(temp_path)
+                # Step 2: Publish the container
+                publish_url = f"https://graph.facebook.com/v18.0/{instagram_business_account_id}/media_publish"
+                publish_params = {
+                    "creation_id": creation_id,
+                    "access_token": access_token,
+                }
+                publish_resp = await client.post(publish_url, params=publish_params)
+                publish_resp.raise_for_status()
+                publish_data = publish_resp.json()
 
-            # Upload photo
-            result = client.photo_upload(temp_path, caption)
-
-            return {"success": True, "post_id": result.pk, "platform": "instagram"}
+                return {
+                    "success": True,
+                    "post_id": publish_data.get("id"),
+                    "platform": "instagram",
+                }
         except Exception as e:
             return {"success": False, "error": str(e), "platform": "instagram"}
 
@@ -365,18 +392,24 @@ class SocialMediaPosterService:
                     results["facebook"] = {"success": True, "data": result}
 
                 elif platform == "instagram" and "instagram" in credentials:
-                    if image_bytes:
+                    # Instagram requires a publicly accessible image URL
+                    if image_url and (
+                        image_url.startswith("http://")
+                        or image_url.startswith("https://")
+                    ):
                         result = await self.post_to_instagram(
-                            username=credentials["instagram"]["username"],
-                            password=credentials["instagram"]["password"],
+                            access_token=credentials["instagram"]["access_token"],
+                            instagram_business_account_id=credentials["instagram"][
+                                "instagram_business_account_id"
+                            ],
                             caption=captions.get("instagram", ""),
-                            image_bytes=image_bytes,
+                            image_url=image_url,
                         )
                         results["instagram"] = result
                     else:
                         results["instagram"] = {
                             "success": False,
-                            "error": "Image required for Instagram",
+                            "error": "Public image URL required for Instagram (must be http:// or https://)",
                         }
 
                 elif platform == "twitter" and "twitter" in credentials:

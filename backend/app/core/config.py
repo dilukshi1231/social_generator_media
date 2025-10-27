@@ -33,8 +33,9 @@ class Settings(BaseSettings):
     GOOGLE_CLIENT_SECRET: str = ""
     FACEBOOK_APP_ID: str = ""
     FACEBOOK_APP_SECRET: str = ""
-    FACEBOOK_REDIRECT_URI: str = ""  # ADD THIS
-    FRONTEND_URL: str = ""  # ADD THIS
+    FACEBOOK_REDIRECT_URI: str = ""
+    INSTAGRAM_REDIRECT_URI: str = ""
+    FRONTEND_URL: str = ""
     BACKEND_URL: str = (
         "http://localhost:8000"  # Base URL for backend (for OAuth callbacks)
     )
@@ -58,6 +59,8 @@ class Settings(BaseSettings):
     TWITTER_ACCESS_SECRET: str = ""
     INSTAGRAM_USERNAME: str = ""
     INSTAGRAM_PASSWORD: str = ""
+    INSTAGRAM_APP_ID: str = ""
+    INSTAGRAM_APP_SECRET: str = ""
     LINKEDIN_CLIENT_ID: str = ""
     LINKEDIN_CLIENT_SECRET: str = ""
 

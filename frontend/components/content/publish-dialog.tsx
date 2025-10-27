@@ -208,8 +208,8 @@ export default function PublishDialog({
                         type="button"
                         onClick={() => togglePlatform(account.platform)}
                         className={`flex items-center gap-3 p-4 border rounded-lg transition-all ${isSelected
-                            ? 'border-indigo-500 bg-indigo-50 ring-2 ring-indigo-200'
-                            : 'border-gray-200 hover:border-gray-300'
+                          ? 'border-indigo-500 bg-indigo-50 ring-2 ring-indigo-200'
+                          : 'border-gray-200 hover:border-gray-300'
                           }`}
                       >
                         <div className={`flex-shrink-0 ${isSelected ? 'opacity-100' : 'opacity-50'}`}>
@@ -274,6 +274,21 @@ export default function PublishDialog({
                   <p className="text-xs text-gray-500">📷 With image</p>
                 )}
               </div>
+
+              {/* Instagram Warning */}
+              {selectedPlatforms.includes('instagram') && (
+                <div className="bg-blue-50 border border-blue-200 p-4 rounded-lg">
+                  <div className="flex gap-2">
+                    <AlertCircle className="h-5 w-5 text-blue-600 flex-shrink-0 mt-0.5" />
+                    <div className="space-y-1">
+                      <p className="text-sm font-medium text-blue-900">Instagram Publishing Note</p>
+                      <p className="text-xs text-blue-700">
+                        Instagram requires a publicly accessible image URL. Make sure your image is hosted and accessible from the internet.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Action Buttons */}
               <div className="flex gap-3 pt-4">
