@@ -232,19 +232,19 @@ export default function SocialAccountsPage() {
                       className="w-full mt-4"
                       onClick={async () => {
                         if (connected) return;
-                        // Prefer OAuth for LinkedIn; fall back to manual dialog for others
-                        if (platform.value === 'linkedin') {
+                        // Use OAuth for LinkedIn, Instagram, and Facebook
+                        if (platform.value === 'linkedin' || platform.value === 'instagram' || platform.value === 'facebook') {
                           try {
-                            const { authorize_url } = await oauthAPI.getAuthorizeUrl('linkedin');
+                            const { authorize_url } = await oauthAPI.getAuthorizeUrl(platform.value);
                             window.location.href = authorize_url;
                           } catch (error: unknown) {
-                            const errorMsg = (error as { response?: { data?: { detail?: string } } })?.response?.data?.detail || 'OAuth not configured. Please set LINKEDIN_CLIENT_ID and LINKEDIN_CLIENT_SECRET in backend/.env';
+                            const errorMsg = (error as { response?: { data?: { detail?: string } } })?.response?.data?.detail || `OAuth not configured for ${platform.name}. Please check backend configuration.`;
                             toast({
-                              title: 'LinkedIn connect failed',
+                              title: `${platform.name} connect failed`,
                               description: errorMsg,
                               variant: 'destructive'
                             });
-                            console.error('LinkedIn OAuth error:', error);
+                            console.error(`${platform.name} OAuth error:`, error);
                           }
                         } else {
                           setSelectedPlatform(platform.value);
@@ -253,7 +253,7 @@ export default function SocialAccountsPage() {
                       }}
                       disabled={connected}
                     >
-                      {connected ? 'Connected' : (platform.value === 'linkedin' ? 'Connect with LinkedIn' : 'Connect')}
+                      {connected ? 'Connected' : (platform.value === 'linkedin' || platform.value === 'instagram' || platform.value === 'facebook' ? `Connect with ${platform.name}` : 'Connect')}
                     </Button>
                   </CardContent>
                 </Card>
