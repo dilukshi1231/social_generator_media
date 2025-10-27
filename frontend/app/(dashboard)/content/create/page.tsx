@@ -45,7 +45,7 @@ export default function CreateContentPage() {
       console.log('[Generate] Starting content generation with topic:', topic.trim());
 
       // Call n8n webhook to generate image and captions
-      const webhookUrl = 'http://localhost:5678/webhook-test/generate-social-posts';
+      const webhookUrl = 'http://localhost:5678/webhook-test/viraldata';
       console.log('[Generate] Calling webhook:', webhookUrl);
 
       const webhookRes = await fetch(webhookUrl, {
@@ -256,7 +256,7 @@ export default function CreateContentPage() {
       console.log('[Regenerate All] Starting regeneration with topic:', topic.trim());
 
       // Call n8n webhook to regenerate everything with the same topic
-      const webhookUrl = 'http://localhost:5678/webhook-test/generate-social-posts';
+      const webhookUrl = 'http://localhost:5678/webhook-test/viraldata';
       console.log('[Regenerate All] Calling webhook:', webhookUrl);
 
       const webhookRes = await fetch(webhookUrl, {
