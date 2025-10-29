@@ -115,6 +115,31 @@ async def publish_to_platform(post_id: int, db: AsyncSession):
                 "post_id"
             )
 
+            # Generate platform post URL
+            if post.platform_post_id:
+                if post.platform == PlatformType.TWITTER:
+                    # Twitter URL format: https://twitter.com/{username}/status/{tweet_id}
+                    username = social_account.username
+                    post.platform_post_url = (
+                        f"https://twitter.com/{username}/status/{post.platform_post_id}"
+                    )
+                elif post.platform == PlatformType.FACEBOOK:
+                    # Facebook URL format: https://facebook.com/{post_id}
+                    post.platform_post_url = (
+                        f"https://facebook.com/{post.platform_post_id}"
+                    )
+                elif post.platform == PlatformType.INSTAGRAM:
+                    # Instagram URL format: https://instagram.com/p/{post_id}
+                    post.platform_post_url = (
+                        f"https://instagram.com/p/{post.platform_post_id}"
+                    )
+                elif post.platform == PlatformType.LINKEDIN:
+                    # LinkedIn URL - already set from API response usually
+                    if not post.platform_post_url:
+                        post.platform_post_url = (
+                            f"https://linkedin.com/feed/update/{post.platform_post_id}"
+                        )
+
             # Update social account last posted time
             social_account.last_posted_at = datetime.utcnow()
         else:

@@ -2,7 +2,6 @@ import httpx
 import base64
 from typing import Dict, List, Optional
 from datetime import datetime
-import tweepy
 import os
 
 
@@ -121,52 +120,90 @@ class SocialMediaPosterService:
 
     async def post_to_twitter(
         self,
-        api_key: str,
-        api_secret: str,
         access_token: str,
-        access_secret: str,
         text: str,
         image_bytes: Optional[bytes] = None,
     ) -> Dict:
         """
-        Post content to Twitter/X.
+        Post content to Twitter/X using OAuth 2.0 and API v2.
+
+        NOTE: Media upload is not supported with OAuth 2.0 user context.
+        Twitter's media upload v1.1 endpoint requires OAuth 1.0a authentication.
+        Only text tweets are supported with OAuth 2.0.
 
         Args:
-            api_key: Twitter API key
-            api_secret: Twitter API secret
-            access_token: Twitter access token
-            access_secret: Twitter access token secret
-            text: Tweet text (max 280 chars)
-            image_base64: Base64 encoded image (optional)
+            access_token: Twitter OAuth 2.0 access token
+            text: Tweet text (max 280 characters)
+            image_bytes: Raw image bytes (IGNORED - not supported with OAuth 2.0)
 
         Returns:
             Response from Twitter API
         """
         try:
-            # Authenticate
-            auth = tweepy.OAuthHandler(api_key, api_secret)
-            auth.set_access_token(access_token, access_secret)
-
-            # Create API object
-            api = tweepy.API(auth)
+            print(f"[Twitter Post] Starting tweet post, text length: {len(text)}")
 
             if image_bytes:
-                temp_path = f"/tmp/twitter_{datetime.now().timestamp()}.png"
+                print(
+                    "[Twitter Post] WARNING: Image upload not supported with OAuth 2.0. Posting text-only tweet."
+                )
 
-                with open(temp_path, "wb") as f:
-                    f.write(image_bytes)
+            # Post text-only tweet using v2 endpoint
+            # Media upload is not supported with OAuth 2.0 user context
+            async with httpx.AsyncClient(timeout=60.0) as client:
+                tweet_url = "https://api.twitter.com/2/tweets"
+                headers = {
+                    "Authorization": f"Bearer {access_token}",
+                    "Content-Type": "application/json",
+                }
+                tweet_data = {"text": text}
 
-                # Upload media
-                media = api.media_upload(temp_path)
+                print(f"[Twitter Post] Creating text-only tweet...")
+                tweet_response = await client.post(
+                    tweet_url, headers=headers, json=tweet_data
+                )
 
-                # Post tweet with media
-                tweet = api.update_status(status=text, media_ids=[media.media_id])
-            else:
-                # Post text only tweet
-                tweet = api.update_status(status=text)
+                print(
+                    f"[Twitter Post] Tweet creation status: {tweet_response.status_code}"
+                )
 
-            return {"success": True, "tweet_id": tweet.id_str, "platform": "twitter"}
+                if tweet_response.status_code != 201:
+                    error_text = tweet_response.text
+                    print(f"[Twitter Post] Tweet creation error: {error_text}")
+
+                    # Parse error for better message
+                    try:
+                        error_json = tweet_response.json()
+                        error_detail = (
+                            error_json.get("detail")
+                            or error_json.get("title")
+                            or error_text
+                        )
+                    except:
+                        error_detail = error_text
+
+                    return {
+                        "success": False,
+                        "error": f"Tweet creation failed: {error_detail}",
+                        "platform": "twitter",
+                    }
+
+                tweet_response.raise_for_status()
+                tweet_result = tweet_response.json()
+                tweet_id = tweet_result.get("data", {}).get("id")
+
+                print(f"[Twitter Post] Tweet posted successfully, ID: {tweet_id}")
+
+                return {
+                    "success": True,
+                    "post_id": tweet_id,
+                    "platform": "twitter",
+                }
+
         except Exception as e:
+            print(f"[Twitter Post] Exception occurred: {str(e)}")
+            import traceback
+
+            print(f"[Twitter Post] Traceback: {traceback.format_exc()}")
             return {"success": False, "error": str(e), "platform": "twitter"}
 
     async def post_to_linkedin(
@@ -414,10 +451,7 @@ class SocialMediaPosterService:
 
                 elif platform == "twitter" and "twitter" in credentials:
                     result = await self.post_to_twitter(
-                        api_key=credentials["twitter"]["api_key"],
-                        api_secret=credentials["twitter"]["api_secret"],
                         access_token=credentials["twitter"]["access_token"],
-                        access_secret=credentials["twitter"]["access_secret"],
                         text=captions.get("twitter", ""),
                         image_bytes=image_bytes,
                     )

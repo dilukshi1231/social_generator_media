@@ -35,6 +35,7 @@ class Settings(BaseSettings):
     FACEBOOK_APP_SECRET: str = ""
     FACEBOOK_REDIRECT_URI: str = ""
     INSTAGRAM_REDIRECT_URI: str = ""
+    TWITTER_REDIRECT_URI: str = ""
     FRONTEND_URL: str = ""
     BACKEND_URL: str = (
         "http://localhost:8000"  # Base URL for backend (for OAuth callbacks)
@@ -55,8 +56,9 @@ class Settings(BaseSettings):
     # Social Media
     TWITTER_API_KEY: str = ""
     TWITTER_API_SECRET: str = ""
-    TWITTER_ACCESS_TOKEN: str = ""
-    TWITTER_ACCESS_SECRET: str = ""
+    TWITTER_CLIENT_ID: str = ""
+    TWITTER_CLIENT_SECRET: str = ""
+    TWITTER_BEARER_TOKEN: str = ""
     INSTAGRAM_USERNAME: str = ""
     INSTAGRAM_PASSWORD: str = ""
     INSTAGRAM_APP_ID: str = ""

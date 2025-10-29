@@ -18,6 +18,13 @@ import { Loader2, Facebook, Instagram, Linkedin, Twitter, AlertCircle, CheckCirc
 import type { Content, SocialAccount } from '@/types';
 import { useRouter } from 'next/navigation';
 
+// X (Twitter) Icon Component
+const XIcon = ({ className }: { className?: string }) => (
+  <svg viewBox="0 0 24 24" fill="currentColor" className={className}>
+    <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+  </svg>
+);
+
 interface PublishDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -72,7 +79,7 @@ export default function PublishDialog({
       facebook: Facebook,
       instagram: Instagram,
       linkedin: Linkedin,
-      twitter: Twitter,
+      twitter: XIcon,
     };
     return icons[platform] || Twitter;
   };
@@ -149,7 +156,7 @@ export default function PublishDialog({
 
       // Redirect to content list after decision
       setTimeout(() => {
-        router.push('/dashboard/content');
+        router.push('/content');
       }, 800);
     } catch (error: unknown) {
       const message = (error as { response?: { data?: { detail?: string } } }).response?.data?.detail || 'Failed to publish content';
@@ -186,7 +193,7 @@ export default function PublishDialog({
               <Button
                 onClick={() => {
                   onOpenChange(false);
-                  router.push('/dashboard/social-accounts');
+                  router.push('/social-accounts');
                 }}
               >
                 Connect Accounts
@@ -290,6 +297,21 @@ export default function PublishDialog({
                 </div>
               )}
 
+              {/* Twitter Warning */}
+              {selectedPlatforms.includes('twitter') && content.image_url && (
+                <div className="bg-yellow-50 border border-yellow-200 p-4 rounded-lg">
+                  <div className="flex gap-2">
+                    <AlertCircle className="h-5 w-5 text-yellow-600 flex-shrink-0 mt-0.5" />
+                    <div className="space-y-1">
+                      <p className="text-sm font-medium text-yellow-900">X (Twitter) Limitation</p>
+                      <p className="text-xs text-yellow-700">
+                        X/Twitter does not support image uploads with OAuth 2.0. Only the text caption will be posted. To post images, you would need OAuth 1.0a authentication.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Action Buttons */}
               <div className="flex gap-3 pt-4">
                 <Button
@@ -298,7 +320,7 @@ export default function PublishDialog({
                   onClick={() => {
                     onOpenChange(false);
                     // User decided not to post now; redirect to content list
-                    router.push('/dashboard/content');
+                    router.push('/content');
                   }}
                   disabled={isLoading}
                   className="flex-1"

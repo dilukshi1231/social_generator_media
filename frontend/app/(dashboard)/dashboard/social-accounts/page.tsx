@@ -11,6 +11,13 @@ import { Facebook, Instagram, Linkedin, Twitter, Plus, CheckCircle, AlertCircle,
 import type { SocialAccount, PlatformType } from '@/types';
 import ConnectAccountDialog from '@/components/social-accounts/connect-account-dialog';
 
+// X (Twitter) Icon Component
+const XIcon = ({ className }: { className?: string }) => (
+  <svg viewBox="0 0 24 24" fill="currentColor" className={className}>
+    <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+  </svg>
+);
+
 interface Platform {
   name: string;
   value: string;
@@ -145,7 +152,7 @@ export default function SocialAccountsPage() {
       facebook: Facebook,
       instagram: Instagram,
       linkedin: Linkedin,
-      twitter: Twitter,
+      twitter: XIcon,
       tiktok: Twitter, // Using Twitter icon as placeholder
     };
     return icons[platform] || Twitter;
@@ -232,8 +239,8 @@ export default function SocialAccountsPage() {
                       className="w-full mt-4"
                       onClick={async () => {
                         if (connected) return;
-                        // Use OAuth for LinkedIn, Instagram, and Facebook
-                        if (platform.value === 'linkedin' || platform.value === 'instagram' || platform.value === 'facebook') {
+                        // Use OAuth for LinkedIn, Instagram, Facebook, and Twitter
+                        if (platform.value === 'linkedin' || platform.value === 'instagram' || platform.value === 'facebook' || platform.value === 'twitter') {
                           try {
                             const { authorize_url } = await oauthAPI.getAuthorizeUrl(platform.value);
                             window.location.href = authorize_url;
@@ -253,7 +260,7 @@ export default function SocialAccountsPage() {
                       }}
                       disabled={connected}
                     >
-                      {connected ? 'Connected' : (platform.value === 'linkedin' || platform.value === 'instagram' || platform.value === 'facebook' ? `Connect with ${platform.name}` : 'Connect')}
+                      {connected ? 'Connected' : (platform.value === 'twitter' ? 'Connect with X' : platform.value === 'linkedin' || platform.value === 'instagram' || platform.value === 'facebook' ? `Connect with ${platform.name}` : 'Connect')}
                     </Button>
                   </CardContent>
                 </Card>
