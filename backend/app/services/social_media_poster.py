@@ -2,7 +2,6 @@ import httpx
 import base64
 from typing import Dict, List, Optional
 from datetime import datetime
-import tweepy
 import os
 
 
@@ -121,51 +120,80 @@ class SocialMediaPosterService:
 
     async def post_to_twitter(
         self,
-        api_key: str,
-        api_secret: str,
         access_token: str,
-        access_secret: str,
         text: str,
         image_bytes: Optional[bytes] = None,
     ) -> Dict:
         """
-        Post content to Twitter/X.
+        Post content to Twitter/X using OAuth 2.0 and API v2.
 
         Args:
-            api_key: Twitter API key
-            api_secret: Twitter API secret
-            access_token: Twitter access token
-            access_secret: Twitter access token secret
+            access_token: Twitter OAuth 2.0 access token
             text: Tweet text (max 280 chars)
-            image_base64: Base64 encoded image (optional)
+            image_bytes: Raw image bytes (optional)
 
         Returns:
             Response from Twitter API
         """
         try:
-            # Authenticate
-            auth = tweepy.OAuthHandler(api_key, api_secret)
-            auth.set_access_token(access_token, access_secret)
+            async with httpx.AsyncClient(timeout=60.0) as client:
+                headers = {
+                    "Authorization": f"Bearer {access_token}",
+                    "Content-Type": "application/json",
+                }
 
-            # Create API object
-            api = tweepy.API(auth)
+                if image_bytes:
+                    # Step 1: Upload media using v1.1 endpoint (still required for media)
+                    media_url = "https://upload.twitter.com/1.1/media/upload.json"
 
-            if image_bytes:
-                temp_path = f"/tmp/twitter_{datetime.now().timestamp()}.png"
+                    # Convert bytes to base64 for upload
+                    import base64
 
-                with open(temp_path, "wb") as f:
-                    f.write(image_bytes)
+                    media_data = base64.b64encode(image_bytes).decode("utf-8")
 
-                # Upload media
-                media = api.media_upload(temp_path)
+                    media_headers = {
+                        "Authorization": f"Bearer {access_token}",
+                    }
 
-                # Post tweet with media
-                tweet = api.update_status(status=text, media_ids=[media.media_id])
-            else:
-                # Post text only tweet
-                tweet = api.update_status(status=text)
+                    files = {"media": ("image.png", image_bytes, "image/png")}
 
-            return {"success": True, "tweet_id": tweet.id_str, "platform": "twitter"}
+                    media_response = await client.post(
+                        media_url, headers=media_headers, files=files
+                    )
+                    media_response.raise_for_status()
+                    media_id = media_response.json().get("media_id_string")
+
+                    # Step 2: Create tweet with media using v2 endpoint
+                    tweet_url = "https://api.twitter.com/2/tweets"
+                    tweet_data = {"text": text, "media": {"media_ids": [media_id]}}
+
+                    tweet_response = await client.post(
+                        tweet_url, headers=headers, json=tweet_data
+                    )
+                    tweet_response.raise_for_status()
+                    tweet_result = tweet_response.json()
+
+                    return {
+                        "success": True,
+                        "post_id": tweet_result.get("data", {}).get("id"),
+                        "platform": "twitter",
+                    }
+                else:
+                    # Post text-only tweet using v2 endpoint
+                    tweet_url = "https://api.twitter.com/2/tweets"
+                    tweet_data = {"text": text}
+
+                    tweet_response = await client.post(
+                        tweet_url, headers=headers, json=tweet_data
+                    )
+                    tweet_response.raise_for_status()
+                    tweet_result = tweet_response.json()
+
+                    return {
+                        "success": True,
+                        "post_id": tweet_result.get("data", {}).get("id"),
+                        "platform": "twitter",
+                    }
         except Exception as e:
             return {"success": False, "error": str(e), "platform": "twitter"}
 
@@ -414,10 +442,7 @@ class SocialMediaPosterService:
 
                 elif platform == "twitter" and "twitter" in credentials:
                     result = await self.post_to_twitter(
-                        api_key=credentials["twitter"]["api_key"],
-                        api_secret=credentials["twitter"]["api_secret"],
                         access_token=credentials["twitter"]["access_token"],
-                        access_secret=credentials["twitter"]["access_secret"],
                         text=captions.get("twitter", ""),
                         image_bytes=image_bytes,
                     )
