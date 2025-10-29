@@ -127,131 +127,78 @@ class SocialMediaPosterService:
         """
         Post content to Twitter/X using OAuth 2.0 and API v2.
 
+        NOTE: Media upload is not supported with OAuth 2.0 user context.
+        Twitter's media upload v1.1 endpoint requires OAuth 1.0a authentication.
+        Only text tweets are supported with OAuth 2.0.
+
         Args:
             access_token: Twitter OAuth 2.0 access token
-            text: Tweet text (max 280 chars)
-            image_bytes: Raw image bytes (optional)
+            text: Tweet text (max 280 characters)
+            image_bytes: Raw image bytes (IGNORED - not supported with OAuth 2.0)
 
         Returns:
             Response from Twitter API
         """
         try:
             print(f"[Twitter Post] Starting tweet post, text length: {len(text)}")
-            print(f"[Twitter Post] Has image: {image_bytes is not None}")
 
+            if image_bytes:
+                print(
+                    "[Twitter Post] WARNING: Image upload not supported with OAuth 2.0. Posting text-only tweet."
+                )
+
+            # Post text-only tweet using v2 endpoint
+            # Media upload is not supported with OAuth 2.0 user context
             async with httpx.AsyncClient(timeout=60.0) as client:
-                if image_bytes:
-                    # Step 1: Upload media using v1.1 endpoint (still required for media)
-                    print("[Twitter Post] Uploading media...")
-                    media_url = "https://upload.twitter.com/1.1/media/upload.json"
+                tweet_url = "https://api.twitter.com/2/tweets"
+                headers = {
+                    "Authorization": f"Bearer {access_token}",
+                    "Content-Type": "application/json",
+                }
+                tweet_data = {"text": text}
 
-                    media_headers = {
-                        "Authorization": f"Bearer {access_token}",
-                    }
+                print(f"[Twitter Post] Creating text-only tweet...")
+                tweet_response = await client.post(
+                    tweet_url, headers=headers, json=tweet_data
+                )
 
-                    files = {"media": ("image.png", image_bytes, "image/png")}
+                print(
+                    f"[Twitter Post] Tweet creation status: {tweet_response.status_code}"
+                )
 
-                    media_response = await client.post(
-                        media_url, headers=media_headers, files=files
-                    )
+                if tweet_response.status_code != 201:
+                    error_text = tweet_response.text
+                    print(f"[Twitter Post] Tweet creation error: {error_text}")
 
-                    print(
-                        f"[Twitter Post] Media upload status: {media_response.status_code}"
-                    )
-
-                    if media_response.status_code != 200:
-                        print(
-                            f"[Twitter Post] Media upload error: {media_response.text}"
+                    # Parse error for better message
+                    try:
+                        error_json = tweet_response.json()
+                        error_detail = (
+                            error_json.get("detail")
+                            or error_json.get("title")
+                            or error_text
                         )
-                        return {
-                            "success": False,
-                            "error": f"Media upload failed: {media_response.text}",
-                            "platform": "twitter",
-                        }
-
-                    media_response.raise_for_status()
-                    media_json = media_response.json()
-                    media_id = media_json.get("media_id_string")
-
-                    print(f"[Twitter Post] Media uploaded, ID: {media_id}")
-
-                    # Step 2: Create tweet with media using v2 endpoint
-                    tweet_url = "https://api.twitter.com/2/tweets"
-                    headers = {
-                        "Authorization": f"Bearer {access_token}",
-                        "Content-Type": "application/json",
-                    }
-                    tweet_data = {"text": text, "media": {"media_ids": [media_id]}}
-
-                    print(f"[Twitter Post] Creating tweet with media...")
-                    tweet_response = await client.post(
-                        tweet_url, headers=headers, json=tweet_data
-                    )
-
-                    print(
-                        f"[Twitter Post] Tweet creation status: {tweet_response.status_code}"
-                    )
-
-                    if tweet_response.status_code != 201:
-                        print(
-                            f"[Twitter Post] Tweet creation error: {tweet_response.text}"
-                        )
-                        return {
-                            "success": False,
-                            "error": f"Tweet creation failed: {tweet_response.text}",
-                            "platform": "twitter",
-                        }
-
-                    tweet_response.raise_for_status()
-                    tweet_result = tweet_response.json()
-                    tweet_id = tweet_result.get("data", {}).get("id")
-
-                    print(f"[Twitter Post] Tweet posted successfully, ID: {tweet_id}")
+                    except:
+                        error_detail = error_text
 
                     return {
-                        "success": True,
-                        "post_id": tweet_id,
+                        "success": False,
+                        "error": f"Tweet creation failed: {error_detail}",
                         "platform": "twitter",
                     }
-                else:
-                    # Post text-only tweet using v2 endpoint
-                    tweet_url = "https://api.twitter.com/2/tweets"
-                    headers = {
-                        "Authorization": f"Bearer {access_token}",
-                        "Content-Type": "application/json",
-                    }
-                    tweet_data = {"text": text}
 
-                    print(f"[Twitter Post] Creating text-only tweet...")
-                    tweet_response = await client.post(
-                        tweet_url, headers=headers, json=tweet_data
-                    )
+                tweet_response.raise_for_status()
+                tweet_result = tweet_response.json()
+                tweet_id = tweet_result.get("data", {}).get("id")
 
-                    print(
-                        f"[Twitter Post] Tweet creation status: {tweet_response.status_code}"
-                    )
+                print(f"[Twitter Post] Tweet posted successfully, ID: {tweet_id}")
 
-                    if tweet_response.status_code != 201:
-                        print(
-                            f"[Twitter Post] Tweet creation error: {tweet_response.text}"
-                        )
-                        return {
-                            "success": False,
-                            "error": f"Tweet creation failed: {tweet_response.text}",
-                            "platform": "twitter",
-                        }
+                return {
+                    "success": True,
+                    "post_id": tweet_id,
+                    "platform": "twitter",
+                }
 
-                    tweet_response.raise_for_status()
-                    tweet_result = tweet_response.json()
-                    tweet_id = tweet_result.get("data", {}).get("id")
-
-                    print(f"[Twitter Post] Tweet posted successfully, ID: {tweet_id}")
-
-                    return {
-                        "success": True,
-                        "post_id": tweet_id,
-                        "platform": "twitter",
-                    }
         except Exception as e:
             print(f"[Twitter Post] Exception occurred: {str(e)}")
             import traceback
