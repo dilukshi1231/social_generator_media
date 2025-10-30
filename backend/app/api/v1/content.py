@@ -18,6 +18,15 @@ router = APIRouter()
 
 
 # Schemas
+class VideoGenerateRequest(BaseModel):
+    query: str
+
+class VideoGenerateResponse(BaseModel):
+    video_url: str
+    video_id: str
+    duration: int
+    width: int
+    height: int
 class ContentGenerateRequest(BaseModel):
     topic: str
     auto_approve: bool = False
@@ -46,7 +55,79 @@ class ContentApprovalRequest(BaseModel):
     approved: bool
     feedback: Optional[str] = None
 
+@router.post("/generate-video-proxy", response_model=VideoGenerateResponse)
+async def generate_video_proxy(
+    request: VideoGenerateRequest,
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Proxy endpoint to fetch videos from Pexels API.
+    This avoids CORS issues by making the request from the backend.
+    """
+    import httpx
+    import os
 
+    pexels_api_key = os.getenv("PEXELS_API_KEY")
+    
+    if not pexels_api_key:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Pexels API key not configured"
+        )
+
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.get(
+                "https://api.pexels.com/videos/search",
+                headers={
+                    "Authorization": pexels_api_key
+                },
+                params={
+                    "query": request.query,
+                    "per_page": 1,
+                    "orientation": "landscape"
+                }
+            )
+
+            if response.status_code != 200:
+                raise HTTPException(
+                    status_code=response.status_code,
+                    detail=f"Pexels API error: {response.text}"
+                )
+
+            data = response.json()
+            
+            if not data.get("videos") or len(data["videos"]) == 0:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="No videos found for this query"
+                )
+
+            video = data["videos"][0]
+            # Get HD video file
+            video_file = next(
+                (f for f in video["video_files"] if f["quality"] == "hd"),
+                video["video_files"][0]  # Fallback to first available
+            )
+
+            return VideoGenerateResponse(
+                video_url=video_file["link"],
+                video_id=str(video["id"]),
+                duration=video.get("duration", 0),
+                width=video_file.get("width", 1920),
+                height=video_file.get("height", 1080)
+            )
+
+    except httpx.TimeoutException:
+        raise HTTPException(
+            status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+            detail="Pexels API request timed out"
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch video: {str(e)}"
+        )
 @router.post(
     "/generate", response_model=ContentResponse, status_code=status.HTTP_201_CREATED
 )
@@ -119,6 +200,8 @@ class ContentCreateRequest(BaseModel):
     threads_caption: Optional[str] = None
     image_prompt: Optional[str] = None
     image_url: Optional[str] = None
+    video_url: Optional[str] = None  # Add this
+    video_id: Optional[str] = None    # Add this
     auto_approve: bool = False
 
 
@@ -147,6 +230,8 @@ async def create_content(
             threads_caption=request.threads_caption,
             image_prompt=request.image_prompt,
             image_url=request.image_url,
+            video_url=request.video_url,      # Add this
+            video_id=request.video_id,        # Add this
             status=(
                 ContentStatus.APPROVED
                 if request.auto_approve

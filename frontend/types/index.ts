@@ -46,6 +46,8 @@ export interface Content {
   threads_caption?: string;
   image_prompt?: string;
   image_url?: string;
+  video_url?: string;      // Add this
+  video_id?: string;
   status: ContentStatus;
   created_at: string;
   approved_at?: string;

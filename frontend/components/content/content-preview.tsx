@@ -187,7 +187,45 @@ export default function ContentPreview({
           )}
         </CardContent>
       </Card>
+      {/* Add this section after the Image Preview card */}
 
+{/* Video Preview */}
+{generatedContent.video_url && (
+  <Card className="border-0 shadow-2xl bg-white/80 backdrop-blur-sm overflow-hidden hover:shadow-3xl transition-all duration-[400ms] ease-[cubic-bezier(0.23,1,0.32,1)] hover:-translate-y-1 group">
+    <CardHeader className="flex flex-row items-center justify-between bg-gradient-to-r from-purple-50 via-pink-50 to-red-50 border-b-2 border-slate-100">
+      <CardTitle className="flex items-center gap-3 text-xl">
+        <div className="p-3 bg-gradient-to-br from-purple-600 to-pink-600 rounded-xl shadow-lg transition-transform duration-[400ms] ease-[cubic-bezier(0.23,1,0.32,1)] group-hover:scale-110 group-hover:rotate-3">
+          <svg className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+        </div>
+        <span className="bg-gradient-to-r from-purple-700 to-pink-700 bg-clip-text text-transparent font-bold">
+          Generated Video
+        </span>
+      </CardTitle>
+    </CardHeader>
+    <CardContent className="p-6">
+      <div className="relative w-full aspect-video rounded-2xl overflow-hidden bg-gradient-to-br from-slate-100 to-slate-200 shadow-2xl ring-4 ring-purple-100 hover:ring-purple-200 transition-all duration-[400ms] ease-[cubic-bezier(0.23,1,0.32,1)]">
+        <video
+          src={generatedContent.video_url}
+          controls
+          className="w-full h-full object-cover"
+          preload="metadata"
+        >
+          Your browser does not support the video tag.
+        </video>
+      </div>
+      <div className="mt-6 p-5 bg-gradient-to-r from-purple-50 via-pink-50 to-red-50 rounded-xl border-2 border-purple-100 shadow-sm hover:shadow-md transition-all duration-[400ms] ease-[cubic-bezier(0.23,1,0.32,1)]">
+        <p className="text-xs font-bold text-purple-900 uppercase tracking-wider mb-2 flex items-center gap-2">
+          <Sparkles className="h-3.5 w-3.5" />
+          Video from Pexels
+        </p>
+        <p className="text-sm text-slate-700">This video matches your topic: <strong>{content.topic}</strong></p>
+      </div>
+    </CardContent>
+  </Card>
+)}
       {/* Captions Preview */}
       <Card className="border-0 shadow-2xl bg-white/80 backdrop-blur-sm hover:shadow-3xl transition-all duration-[400ms] ease-[cubic-bezier(0.23,1,0.32,1)] hover:-translate-y-1 group">
         <CardHeader className="flex flex-row items-center justify-between bg-gradient-to-r from-slate-50 via-blue-50 to-indigo-50 border-b-2 border-slate-100">

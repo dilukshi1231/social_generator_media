@@ -23,6 +23,47 @@ export default function CreateContentPage() {
     console.log('🚀 CreateContentPage component mounted');
   }, []);
 
+  const generateVideo = async (prompt: string): Promise<string> => {
+  console.log('[Video] Generating video with prompt:', prompt);
+
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+  const proxyUrl = `${apiUrl}/api/v1/content/generate-video-proxy`;
+
+  try {
+    const token = localStorage.getItem('access_token');
+
+    if (!token) {
+      console.error('[Video] No access token found');
+      throw new Error('Authentication required');
+    }
+
+    console.log('[Video] Calling backend proxy:', proxyUrl);
+
+    const response = await fetch(proxyUrl, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ query: prompt }),
+    });
+
+    console.log('[Video] Response status:', response.status);
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Video generation failed: ${errorText}`);
+    }
+
+    const data = await response.json();
+    console.log('[Video] Response data:', data);
+
+    return data.video_url;
+  } catch (error) {
+    console.error('[Video] Error generating video:', error);
+    throw error;
+  }
+};
   const generateImage = async (prompt: string): Promise<string> => {
     console.log('[Image] Generating image with prompt:', prompt);
 
@@ -74,20 +115,19 @@ export default function CreateContentPage() {
     }
   };
 
-  const handleGenerate = async () => {
-    console.log('=== handleGenerate CALLED ===');
-    console.log('Topic:', topic);
+ const handleGenerate = async (e: React.FormEvent) => {
+  e.preventDefault();
 
-    if (!topic.trim()) {
-      toast({
-        title: 'Topic required',
-        description: 'Please enter a topic for content generation',
-        variant: 'destructive',
-      });
-      return;
-    }
+  if (!topic.trim()) {
+    toast({
+      title: 'Error',
+      description: 'Please enter a topic',
+      variant: 'destructive',
+    });
+    return;
+  }
 
-    setIsGenerating(true);
+  setIsGenerating(true);
 
     try {
       // Step 1: Get content from n8n webhook
@@ -148,6 +188,15 @@ export default function CreateContentPage() {
           // Continue without image - don't fail the whole process
         }
       }
+      // Generate video - use topic as search query
+      let videoUrl: string | undefined;
+        try {
+          videoUrl = await generateVideo(topic.trim());
+          console.log('[Video] Video URL:', videoUrl);
+        } catch (videoError) {
+          console.error('[Video] Video generation failed:', videoError);
+      // Continue without video
+      }
 
       // Step 3: Create Content object from webhook response
       const content: Content = {
@@ -161,6 +210,7 @@ export default function CreateContentPage() {
         pinterest_caption: '', // Not in new format
         image_prompt: imagePrompt,
         image_url: imageUrl,
+        video_url: videoUrl, 
         status: 'pending_approval',
         created_at: new Date().toISOString(),
       };
@@ -175,6 +225,12 @@ export default function CreateContentPage() {
           ? 'Review your AI-generated content and image below'
           : 'Review your AI-generated content below (image generation failed)',
       });
+      toast({
+      title: 'Content generated!',
+      description: videoUrl 
+        ? 'Review your AI-generated content, image, and video below'
+        : 'Review your AI-generated content and image below',
+    });
     } catch (error: unknown) {
       console.error('[Webhook] Error:', error);
 

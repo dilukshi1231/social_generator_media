@@ -18,6 +18,10 @@ class Content(Base):
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
 
+    # Video data (add these)
+    video_url = Column(String, nullable=True)
+    video_id = Column(String, nullable=True)
+    video_duration = Column(Integer, nullable=True)
     # Content details
     topic = Column(String, nullable=False)
 
