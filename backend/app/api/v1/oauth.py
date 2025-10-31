@@ -212,6 +212,8 @@ async def instagram_callback(
     code: str | None = None,
     state: str | None = None,
     error: str | None = None,
+    error_reason: str | None = None,
+    error_description: str | None = None,
     db: AsyncSession = Depends(get_db),
 ):
     """Handle Instagram OAuth callback (via Facebook)."""
@@ -220,10 +222,23 @@ async def instagram_callback(
     redirect_error = f"{frontend_redirect_base}/dashboard/social-accounts?connected=instagram&status=error"
 
     if error:
-        return RedirectResponse(redirect_error)
+        error_detail = error_description or error_reason or error
+        print(f"[Instagram OAuth] Error from Facebook: {error_detail}")
+        return RedirectResponse(
+            f"{redirect_error}&error_detail={error_detail.replace(' ', '_')}"
+        )
 
-    if not code or not state or state not in _oauth_state_store:
-        return RedirectResponse(redirect_error)
+    if not code:
+        print("[Instagram OAuth] Missing authorization code")
+        return RedirectResponse(
+            f"{redirect_error}&error_detail=Missing_authorization_code"
+        )
+
+    if not state or state not in _oauth_state_store:
+        print("[Instagram OAuth] Invalid or missing state parameter")
+        return RedirectResponse(
+            f"{redirect_error}&error_detail=Invalid_state_parameter"
+        )
 
     user_id = _oauth_state_store.pop(state)
 
@@ -232,7 +247,10 @@ async def instagram_callback(
     redirect_uri = _instagram_redirect_uri()
 
     if not app_id or not app_secret:
-        return RedirectResponse(redirect_error)
+        print("[Instagram OAuth] Missing Instagram/Facebook credentials in settings")
+        return RedirectResponse(
+            f"{redirect_error}&error_detail=Missing_app_credentials"
+        )
 
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
@@ -261,8 +279,9 @@ async def instagram_callback(
 
             if not short_lived_token:
                 print("[Instagram OAuth] Failed to get short-lived token")
+                print(f"[Instagram OAuth] Token response: {token_data}")
                 return RedirectResponse(
-                    f"{redirect_error}&error_detail=No_access_token"
+                    f"{redirect_error}&error_detail=No_access_token_from_Facebook"
                 )
 
             # Step 2: Exchange for long-lived token
@@ -276,8 +295,12 @@ async def instagram_callback(
             long_lived_resp = await client.get(long_lived_url, params=long_lived_params)
             long_lived_resp.raise_for_status()
             long_lived_data = long_lived_resp.json()
-            access_token = long_lived_data.get("access_token")
+            access_token = long_lived_data.get(
+                "access_token", short_lived_token
+            )  # Fallback to short-lived if no long-lived
             expires_in = long_lived_data.get("expires_in")
+
+            print(f"[Instagram OAuth] Got long-lived token, expires in: {expires_in}")
 
             # Step 3: Get user's Facebook pages
             pages_url = "https://graph.facebook.com/v18.0/me/accounts"
@@ -293,12 +316,43 @@ async def instagram_callback(
                 print(
                     "[Instagram OAuth] No Facebook pages found - user needs a Facebook Page"
                 )
+                print("[Instagram OAuth] SOLUTION: Create a Facebook Page:")
+                print("[Instagram OAuth] 1. Go to facebook.com/pages/create")
+                print("[Instagram OAuth] 2. Create a new page for your business/brand")
+                print(
+                    "[Instagram OAuth] 3. Link your Instagram Business account to the page"
+                )
+                print("[Instagram OAuth] 4. Try connecting again")
                 return RedirectResponse(
-                    f"{redirect_error}&error_detail=No_Facebook_Page_found"
+                    f"{redirect_error}&error_detail=No_Facebook_Page_Create_at_facebook.com/pages/create"
                 )
 
             # Step 4: Get Instagram Business Account connected to the first page
-            page = pages[0]  # Use first page for now
+            # Try to find a page with an Instagram account, otherwise use the first page
+            page_with_instagram = None
+            for p in pages:
+                page_id_temp = p.get("id")
+                page_token_temp = p.get("access_token")
+
+                # Check if this page has an Instagram account
+                ig_check_resp = await client.get(
+                    f"https://graph.facebook.com/v18.0/{page_id_temp}",
+                    params={
+                        "fields": "instagram_business_account",
+                        "access_token": page_token_temp,
+                    },
+                )
+                if ig_check_resp.status_code == 200:
+                    ig_check_data = ig_check_resp.json()
+                    if ig_check_data.get("instagram_business_account"):
+                        page_with_instagram = p
+                        print(
+                            f"[Instagram OAuth] Found page with Instagram: {p.get('name')}"
+                        )
+                        break
+
+            # Use the page with Instagram, or fall back to first page
+            page = page_with_instagram or pages[0]
             page_id = page.get("id")
             page_token = page.get("access_token")
 
@@ -321,12 +375,33 @@ async def instagram_callback(
             ig_user_id = instagram_business_account.get("id")
 
             if not ig_user_id:
+                page_name = page.get("name", "your page")
                 print(
-                    "[Instagram OAuth] No Instagram Business Account linked to this Facebook Page"
+                    f"[Instagram OAuth] No Instagram Business Account linked to Facebook Page: {page_name}"
                 )
-                return RedirectResponse(
-                    f"{redirect_error}&error_detail=No_Instagram_Business_Account_linked"
+                print(
+                    f"[Instagram OAuth] SOLUTION: Link your Instagram Business account to '{page_name}':"
                 )
+                print(
+                    f"[Instagram OAuth] NOTE: Connecting Instagram in Account Center is NOT enough!"
+                )
+                print(
+                    f"[Instagram OAuth] You must link Instagram to the FACEBOOK PAGE (not just your account):"
+                )
+                print(
+                    f"[Instagram OAuth] 1. Go to facebook.com/pages → Select '{page_name}'"
+                )
+                print(f"[Instagram OAuth] 2. Click Settings (left sidebar) → Instagram")
+                print(
+                    f"[Instagram OAuth] 3. Click 'Connect Account' and enter Instagram credentials"
+                )
+                print(
+                    f"[Instagram OAuth] 4. See INSTAGRAM_PAGE_VS_ACCOUNT.md for the difference"
+                )
+
+                # More detailed error message for frontend
+                error_msg = f"Link_Instagram_to_PAGE_{page_name.replace(' ', '_')}_not_just_Account_Center"
+                return RedirectResponse(f"{redirect_error}&error_detail={error_msg}")
 
             # Step 5: Get Instagram account info
             ig_user_url = f"https://graph.facebook.com/v18.0/{ig_user_id}"
@@ -389,14 +464,24 @@ async def instagram_callback(
             db.add(account)
 
         await db.commit()
+        print(f"[Instagram OAuth] Successfully connected Instagram account: {username}")
         return RedirectResponse(redirect_success)
+    except httpx.HTTPStatusError as e:
+        import traceback
+
+        print(f"[Instagram OAuth] HTTP error: {e}")
+        print(
+            f"[Instagram OAuth] Response: {e.response.text if hasattr(e, 'response') else 'N/A'}"
+        )
+        print(f"[Instagram OAuth] Traceback: {traceback.format_exc()}")
+        error_msg = f"HTTP_{e.response.status_code}_{str(e)[:50]}".replace(" ", "_")
+        return RedirectResponse(f"{redirect_error}&error_detail={error_msg}")
     except Exception as e:
         import traceback
 
-        print(f"Instagram OAuth error: {e}")
-        print(f"Traceback: {traceback.format_exc()}")
-        # Add error details to redirect for debugging
-        error_msg = str(e).replace(" ", "_")[:100]
+        print(f"[Instagram OAuth] Unexpected error: {e}")
+        print(f"[Instagram OAuth] Traceback: {traceback.format_exc()}")
+        error_msg = str(e).replace(" ", "_")[:80]
         return RedirectResponse(f"{redirect_error}&error_detail={error_msg}")
 
 

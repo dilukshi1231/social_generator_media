@@ -7,9 +7,8 @@ import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { socialAccountsAPI, oauthAPI } from '@/lib/api';
 import { useToast } from '@/components/ui/use-toast';
-import { Facebook, Instagram, Linkedin, Twitter, Plus, CheckCircle, AlertCircle, Trash2, RefreshCw } from 'lucide-react';
+import { Facebook, Instagram, Linkedin, Twitter, CheckCircle, AlertCircle, Trash2, RefreshCw } from 'lucide-react';
 import type { SocialAccount, PlatformType } from '@/types';
-import ConnectAccountDialog from '@/components/social-accounts/connect-account-dialog';
 
 // X (Twitter) Icon Component
 const XIcon = ({ className }: { className?: string }) => (
@@ -34,8 +33,6 @@ export default function SocialAccountsPage() {
   const { toast } = useToast();
   const [accounts, setAccounts] = useState<SocialAccount[]>([]);
   const [availablePlatforms, setAvailablePlatforms] = useState<Platform[]>([]);
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [selectedPlatform, setSelectedPlatform] = useState<string | undefined>(undefined);
   const [verifyingAccounts, setVerifyingAccounts] = useState<Set<number>>(new Set());
 
   useEffect(() => {
@@ -46,19 +43,34 @@ export default function SocialAccountsPage() {
       const url = new URL(window.location.href);
       const connected = url.searchParams.get('connected');
       const status = url.searchParams.get('status');
+      const errorDetail = url.searchParams.get('error_detail');
+
       if (connected && status) {
         if (status === 'success') {
-          toast({ title: 'Account connected', description: `Successfully connected ${connected}` });
+          toast({
+            title: 'Account connected',
+            description: `Successfully connected ${connected.charAt(0).toUpperCase() + connected.slice(1)}`
+          });
           fetchAccounts();
         } else {
-          toast({ title: 'Connection failed', description: `Failed to connect ${connected}`, variant: 'destructive' });
+          const errorMsg = errorDetail
+            ? `Failed to connect ${connected}: ${errorDetail.replace(/_/g, ' ')}`
+            : `Failed to connect ${connected}`;
+          toast({
+            title: 'Connection failed',
+            description: errorMsg,
+            variant: 'destructive'
+          });
         }
         // Clean params
         url.searchParams.delete('connected');
         url.searchParams.delete('status');
+        url.searchParams.delete('error_detail');
         window.history.replaceState({}, '', url.toString());
       }
-    } catch { }
+    } catch (error) {
+      console.error('Error handling OAuth callback:', error);
+    }
   }, [toast]);
 
   const fetchAccounts = async () => {
@@ -190,13 +202,6 @@ export default function SocialAccountsPage() {
             Connect and manage your social media accounts
           </p>
         </div>
-        <Button onClick={() => {
-          setSelectedPlatform(undefined);
-          setIsDialogOpen(true);
-        }} size="lg">
-          <Plus className="mr-2 h-5 w-5" />
-          Connect Account
-        </Button>
       </div>
 
       {/* Info Alert */}
@@ -246,28 +251,23 @@ export default function SocialAccountsPage() {
                       className="w-full mt-4"
                       onClick={async () => {
                         if (connected) return;
-                        // Use OAuth for LinkedIn, Instagram, Facebook, Twitter, and TikTok
-                        if (platform.value === 'linkedin' || platform.value === 'instagram' || platform.value === 'facebook' || platform.value === 'twitter' || platform.value === 'tiktok') {
-                          try {
-                            const { authorize_url } = await oauthAPI.getAuthorizeUrl(platform.value);
-                            window.location.href = authorize_url;
-                          } catch (error: unknown) {
-                            const errorMsg = (error as { response?: { data?: { detail?: string } } })?.response?.data?.detail || `OAuth not configured for ${platform.name}. Please check backend configuration.`;
-                            toast({
-                              title: `${platform.name} connect failed`,
-                              description: errorMsg,
-                              variant: 'destructive'
-                            });
-                            console.error(`${platform.name} OAuth error:`, error);
-                          }
-                        } else {
-                          setSelectedPlatform(platform.value);
-                          setIsDialogOpen(true);
+                        // Use OAuth for all platforms
+                        try {
+                          const { authorize_url } = await oauthAPI.getAuthorizeUrl(platform.value);
+                          window.location.href = authorize_url;
+                        } catch (error: unknown) {
+                          const errorMsg = (error as { response?: { data?: { detail?: string } } })?.response?.data?.detail || `OAuth not configured for ${platform.name}. Please check backend configuration.`;
+                          toast({
+                            title: `${platform.name} connection failed`,
+                            description: errorMsg,
+                            variant: 'destructive'
+                          });
+                          console.error(`${platform.name} OAuth error:`, error);
                         }
                       }}
                       disabled={connected}
                     >
-                      {connected ? 'Connected' : (platform.value === 'twitter' ? 'Connect with X' : platform.value === 'linkedin' || platform.value === 'instagram' || platform.value === 'facebook' || platform.value === 'tiktok' ? `Connect with ${platform.name}` : 'Connect')}
+                      {connected ? 'Connected' : (platform.value === 'twitter' ? 'Connect with X' : `Connect with ${platform.name}`)}
                     </Button>
                   </CardContent>
                 </Card>
@@ -358,14 +358,6 @@ export default function SocialAccountsPage() {
           </CardContent>
         </Card>
       )}
-
-      {/* Connect Account Dialog */}
-      <ConnectAccountDialog
-        open={isDialogOpen}
-        onOpenChange={setIsDialogOpen}
-        onSuccess={fetchAccounts}
-        selectedPlatform={selectedPlatform}
-      />
     </div>
   );
 }
