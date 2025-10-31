@@ -324,6 +324,27 @@ async def verify_account_connection(
                     "message": "Connection is active and valid",
                 }
 
+        elif account.platform == PlatformType.TIKTOK:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                # Test the token by fetching user info
+                response = await client.get(
+                    "https://open.tiktokapis.com/v2/user/info/",
+                    params={"fields": "open_id,display_name"},
+                    headers={"Authorization": f"Bearer {account.access_token}"},
+                )
+                response.raise_for_status()
+                user_data = response.json()
+
+                return {
+                    "valid": True,
+                    "platform": account.platform,
+                    "user_id": user_data.get("data", {}).get("user", {}).get("open_id"),
+                    "display_name": user_data.get("data", {})
+                    .get("user", {})
+                    .get("display_name"),
+                    "message": "Connection is active and valid",
+                }
+
         # Add verification for other platforms as needed
         else:
             return {
