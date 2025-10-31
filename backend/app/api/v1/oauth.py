@@ -5,6 +5,8 @@ from sqlalchemy import select
 import httpx
 import secrets
 import urllib.parse
+import hashlib
+import base64
 from datetime import datetime, timedelta
 
 from app.core.config import settings
@@ -18,6 +20,9 @@ router = APIRouter()
 
 # Simple in-memory state store for demo/dev; for production, persist per-user (e.g., Redis)
 _oauth_state_store: dict[str, int] = {}
+# Store code_verifier for PKCE (TikTok). Value is tuple(code_verifier, timestamp)
+_pkce_store: dict[str, tuple[str, float]] = {}
+_PKCE_TTL_SECONDS = 300  # 5 minutes
 
 
 def _linkedin_redirect_uri() -> str:
@@ -803,7 +808,7 @@ def _tiktok_redirect_uri() -> str:
 
 @router.get("/tiktok/authorize")
 async def tiktok_authorize(current_user: User = Depends(get_current_user)):
-    """Initiate TikTok OAuth 2.0 authorization."""
+    """Initiate TikTok OAuth 2.0 authorization with PKCE."""
     client_key = settings.TIKTOK_CLIENT_KEY
     redirect_uri = _tiktok_redirect_uri()
 
@@ -816,6 +821,16 @@ async def tiktok_authorize(current_user: User = Depends(get_current_user)):
     state = secrets.token_urlsafe(32)
     _oauth_state_store[state] = current_user.id
 
+    # Generate PKCE code_verifier and code_challenge (S256)
+    # Use a random 64-byte value and base64-url encode to meet length requirements
+    raw_verifier = secrets.token_bytes(64)
+    code_verifier = base64.urlsafe_b64encode(raw_verifier).decode().rstrip("=")
+    digest = hashlib.sha256(code_verifier.encode()).digest()
+    code_challenge = base64.urlsafe_b64encode(digest).decode().rstrip("=")
+
+    # Store code_verifier with timestamp to use in callback (simple TTL)
+    _pkce_store[state] = (code_verifier, datetime.utcnow().timestamp())
+
     # TikTok OAuth 2.0 scopes
     # https://developers.tiktok.com/doc/login-kit-web/
     scope = "user.info.basic,video.publish"
@@ -826,11 +841,16 @@ async def tiktok_authorize(current_user: User = Depends(get_current_user)):
         "response_type": "code",
         "redirect_uri": redirect_uri,
         "state": state,
+        "code_challenge": code_challenge,
+        "code_challenge_method": "S256",
     }
 
     url = "https://www.tiktok.com/v2/auth/authorize/?" + urllib.parse.urlencode(params)
 
-    return JSONResponse({"authorize_url": url})
+    # Debug: print authorize URL (safe to remove in production)
+    print(f"[TikTok OAuth] Authorize URL for user {current_user.id}: {url}")
+
+    return JSONResponse({"authorize_url": url, "code_challenge": code_challenge})
 
 
 @router.get("/tiktok/callback")
@@ -856,6 +876,17 @@ async def tiktok_callback(
         return RedirectResponse(redirect_error)
 
     user_id = _oauth_state_store.pop(state)
+    pkce_entry = _pkce_store.pop(state, None)  # Get code_verifier for PKCE
+
+    if not pkce_entry:
+        print(f"[TikTok OAuth] Missing code_verifier for PKCE")
+        return RedirectResponse(redirect_error)
+
+    code_verifier, ts = pkce_entry
+    # Simple TTL check
+    if datetime.utcnow().timestamp() - ts > _PKCE_TTL_SECONDS:
+        print(f"[TikTok OAuth] PKCE code_verifier expired for state {state}")
+        return RedirectResponse(redirect_error)
 
     client_key = settings.TIKTOK_CLIENT_KEY
     client_secret = settings.TIKTOK_CLIENT_SECRET
@@ -869,7 +900,7 @@ async def tiktok_callback(
         async with httpx.AsyncClient(timeout=30.0) as client:
             print(f"[TikTok OAuth] Starting OAuth flow for user {user_id}")
 
-            # Step 1: Exchange code for access token
+            # Step 1: Exchange code for access token (with PKCE code_verifier)
             token_url = "https://open.tiktokapis.com/v2/oauth/token/"
 
             token_data = {
@@ -878,6 +909,7 @@ async def tiktok_callback(
                 "code": code,
                 "grant_type": "authorization_code",
                 "redirect_uri": redirect_uri,
+                "code_verifier": code_verifier,  # PKCE verification
             }
 
             headers = {
