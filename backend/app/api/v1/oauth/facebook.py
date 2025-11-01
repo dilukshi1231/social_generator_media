@@ -131,8 +131,13 @@ async def facebook_callback(
             print(f"[Facebook OAuth] Got long-lived token")
 
             # Step 3: Get user's Facebook pages
+            # Include fields and limit to ensure we get all pages, even those previously connected
             pages_url = "https://graph.facebook.com/v18.0/me/accounts"
-            pages_params = {"access_token": access_token}
+            pages_params = {
+                "access_token": access_token,
+                "fields": "id,name,access_token,category,tasks",
+                "limit": 100,
+            }
             pages_resp = await client.get(pages_url, params=pages_params)
             pages_resp.raise_for_status()
             pages_data = pages_resp.json()
@@ -165,10 +170,128 @@ async def facebook_callback(
                 )
 
             if not pages:
-                print("[Facebook OAuth] No Facebook pages found")
-                return RedirectResponse(
-                    f"{redirect_error}&error_detail=No_Facebook_Page_found"
+                print(
+                    "[Facebook OAuth] No pages from /me/accounts - trying alternative method"
                 )
+
+                # Check if user already has a connected Facebook account in our DB
+                # If yes, we can reuse the page info and just update the token
+                existing_result = await db.execute(
+                    select(SocialAccount).where(
+                        SocialAccount.user_id == user_id,
+                        SocialAccount.platform == PlatformType.FACEBOOK,
+                    )
+                )
+                existing_account = existing_result.scalar_one_or_none()
+
+                if existing_account and existing_account.platform_data:
+                    # Reuse existing page info, just refresh the token
+                    page_id = existing_account.platform_data.get("page_id")
+                    page_name = existing_account.platform_data.get("page_name")
+
+                    if page_id:
+                        print(
+                            f"[Facebook OAuth] Reusing existing page connection: {page_name} (ID: {page_id})"
+                        )
+
+                        # Get fresh page token
+                        page_token_url = f"https://graph.facebook.com/v18.0/{page_id}"
+                        page_token_params = {
+                            "fields": "access_token,name",
+                            "access_token": access_token,
+                        }
+                        try:
+                            page_token_resp = await client.get(
+                                page_token_url, params=page_token_params
+                            )
+                            page_token_resp.raise_for_status()
+                            page_token_data = page_token_resp.json()
+                            page_token = page_token_data.get("access_token")
+
+                            if page_token:
+                                # Create a fake "page" object to continue with normal flow
+                                pages = [
+                                    {
+                                        "id": page_id,
+                                        "name": page_token_data.get("name", page_name),
+                                        "access_token": page_token,
+                                    }
+                                ]
+                                print(
+                                    f"[Facebook OAuth] Successfully refreshed token for existing page"
+                                )
+                        except Exception as token_err:
+                            print(
+                                f"[Facebook OAuth] Could not refresh page token: {token_err}"
+                            )
+
+                # Fallback: Get user's Facebook ID and check their pages via different endpoint
+                if not pages:
+                    fb_user_id = me_data.get("id") if "me_data" in locals() else None
+                    if not fb_user_id:
+                        me_url = "https://graph.facebook.com/v18.0/me"
+                        me_params = {"fields": "id,name", "access_token": access_token}
+                        me_resp = await client.get(me_url, params=me_params)
+                        if me_resp.status_code == 200:
+                            fb_user_id = me_resp.json().get("id")
+
+                    if fb_user_id:
+                        # Try getting pages via the user's business accounts
+                        business_url = (
+                            f"https://graph.facebook.com/v18.0/{fb_user_id}/accounts"
+                        )
+                        business_params = {
+                            "access_token": access_token,
+                            "fields": "id,name,access_token,category,tasks",
+                            "limit": 100,
+                        }
+                        business_resp = await client.get(
+                            business_url, params=business_params
+                        )
+                        if business_resp.status_code == 200:
+                            business_data = business_resp.json()
+                            pages = business_data.get("data", [])
+                            print(
+                                f"[Facebook OAuth] Found {len(pages)} pages via /{fb_user_id}/accounts"
+                            )
+
+                if not pages:
+                    print("[Facebook OAuth] No Facebook pages found via any method")
+                    print(
+                        "[Facebook OAuth] This happens when your Page is connected via Meta Business Suite"
+                    )
+                    print("[Facebook OAuth] SOLUTION:")
+                    print(
+                        "[Facebook OAuth] Go to: https://business.facebook.com/latest/settings/integrations"
+                    )
+                    print(
+                        "[Facebook OAuth] Find your app and click 'Remove' or 'Disconnect'"
+                    )
+                    print(
+                        "[Facebook OAuth] Then go to: https://www.facebook.com/settings?tab=business_tools"
+                    )
+                    print("[Facebook OAuth] Remove any business integrations")
+                    print(
+                        "[Facebook OAuth] Finally: https://www.facebook.com/settings?tab=applications"
+                    )
+                    print("[Facebook OAuth] Remove the app completely")
+                    print("[Facebook OAuth] Then reconnect")
+
+                    # Last resort: Try to find pages via search (works if page is public)
+                    # This won't give us a page access token, but we can guide the user
+                    print("[Facebook OAuth] ")
+                    print("[Facebook OAuth] ALTERNATIVE: Manually disconnect the page:")
+                    print("[Facebook OAuth] 1. Go to your Facebook Page Settings")
+                    print("[Facebook OAuth] 2. Go to 'Page Setup' or 'Settings'")
+                    print(
+                        "[Facebook OAuth] 3. Find 'Connected Apps' or 'Business Integrations'"
+                    )
+                    print("[Facebook OAuth] 4. Remove this app from the page")
+                    print("[Facebook OAuth] 5. Try connecting again")
+
+                    return RedirectResponse(
+                        f"{redirect_error}&error_detail=Page_connected_via_Business_Suite_Remove_integration"
+                    )
 
             # Step 4: Use the first page (or let user select later)
             page = pages[0]
