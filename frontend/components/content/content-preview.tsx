@@ -1,11 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
-import { Check, X, RefreshCw, Facebook, Instagram, Linkedin, Twitter, Image as ImageIcon, Copy, Sparkles, Send, Clock, Video, ExternalLink } from 'lucide-react';
+import { Check, X, RefreshCw, Facebook, Instagram, Linkedin, Twitter, Image as ImageIcon, Copy, Sparkles, Send, Video, ExternalLink, Loader2 } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import type { Content } from '@/types';
 import Image from 'next/image';
@@ -18,21 +18,6 @@ const XIcon = ({ className }: { className?: string }) => (
   </svg>
 );
 
-// Pexels Video Interface
-interface PexelsVideo {
-  id: number;
-  url: string;
-  video_url: string;
-  width: number;
-  height: number;
-  duration: number;
-  image: string;
-  user: {
-    name: string;
-    url: string;
-  };
-}
-
 interface ContentPreviewProps {
   content: Content;
   onApprove?: () => Promise<boolean | void> | boolean | void;
@@ -40,9 +25,20 @@ interface ContentPreviewProps {
   onRegenerateCaptions: () => void;
   onRegenerateImage: () => void;
   isLoading?: boolean;
-  videos?: PexelsVideo[];
-  selectedVideo?: PexelsVideo | null;
-  onVideoSelect?: (video: PexelsVideo) => void;
+}
+
+interface VideoResult {
+  id: number;
+  url: string;
+  video_url: string;
+  image: string;
+  width: number;
+  height: number;
+  duration: number;
+  user: {
+    name: string;
+    url: string;
+  };
 }
 
 export default function ContentPreview({
@@ -52,12 +48,89 @@ export default function ContentPreview({
   onRegenerateCaptions,
   onRegenerateImage,
   isLoading = false,
-  videos = [],
-  selectedVideo = null,
-  onVideoSelect,
 }: ContentPreviewProps) {
   const { toast } = useToast();
   const [publishDialogOpen, setPublishDialogOpen] = useState(false);
+  const [videos, setVideos] = useState<VideoResult[]>([]);
+  const [isLoadingVideos, setIsLoadingVideos] = useState(false);
+  const [videoError, setVideoError] = useState<string | null>(null);
+
+  // Memoized fetchVideos function to prevent infinite loops
+  const fetchVideos = useCallback(async (searchQuery: string) => {
+    console.log('[fetchVideos] Starting video search for:', searchQuery);
+    setIsLoadingVideos(true);
+    setVideoError(null);
+
+    try {
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+      const token = localStorage.getItem('access_token');
+
+      if (!token) {
+        throw new Error('No authentication token found');
+      }
+
+      console.log('[fetchVideos] Calling API:', `${API_URL}/api/v1/content/search-videos`);
+
+      const response = await fetch(`${API_URL}/api/v1/content/search-videos`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          prompt: searchQuery,
+          per_page: 5,
+        }),
+      });
+
+      console.log('[fetchVideos] Response status:', response.status);
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('[fetchVideos] API error:', errorText);
+        throw new Error(`Failed to fetch videos: ${response.status}`);
+      }
+
+      const data = await response.json();
+      console.log('[fetchVideos] Response data:', data);
+
+      if (data.success && data.videos) {
+        console.log('[fetchVideos] Videos found:', data.videos.length);
+        setVideos(data.videos);
+        
+        if (data.videos.length === 0) {
+          setVideoError('No videos found for this topic. Try a different search term.');
+        }
+      } else {
+        console.error('[fetchVideos] API returned unsuccessful response:', data);
+        throw new Error(data.error || 'Failed to fetch videos');
+      }
+    } catch (error) {
+      console.error('[fetchVideos] Error:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Failed to fetch videos';
+      setVideoError(errorMessage);
+      toast({
+        title: 'Video search failed',
+        description: errorMessage,
+        variant: 'destructive',
+      });
+    } finally {
+      setIsLoadingVideos(false);
+    }
+  }, [toast]);
+
+  // Fetch videos when content topic is available
+  useEffect(() => {
+    // Use image_prompt if available (more specific), otherwise use topic
+    const searchQuery = content?.image_prompt || content?.topic;
+    
+    if (searchQuery) {
+      console.log('[useEffect] Triggering video search with query:', searchQuery);
+      fetchVideos(searchQuery);
+    } else {
+      console.log('[useEffect] No search query available');
+    }
+  }, [content?.topic, content?.image_prompt, fetchVideos]);
 
   const handleApproveAndPublish = async () => {
     if (onApprove) {
@@ -122,14 +195,13 @@ export default function ContentPreview({
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700">
-      {/* Success Header with Celebration */}
-      <Card className="border-0 shadow-2xl bg-gradient-to-br from-green-50 via-emerald-50 to-teal-50 backdrop-blur-sm hover:shadow-3xl transition-all duration-[400ms] ease-[cubic-bezier(0.23,1,0.32,1)] hover:-translate-y-1 overflow-hidden relative">
-        <div className="absolute top-0 right-0 w-64 h-64 bg-gradient-to-br from-green-400/10 to-emerald-400/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2"></div>
-        <CardHeader className="relative">
+      {/* Success Header */}
+      <Card className="border-0 shadow-2xl bg-gradient-to-br from-green-50 via-emerald-50 to-teal-50">
+        <CardHeader>
           <div className="flex items-center justify-between">
             <div className="space-y-3">
               <div className="flex items-center gap-3">
-                <div className="p-3 bg-gradient-to-br from-green-500 to-emerald-600 rounded-2xl shadow-lg animate-bounce">
+                <div className="p-3 bg-gradient-to-br from-green-500 to-emerald-600 rounded-2xl shadow-lg">
                   <Check className="h-7 w-7 text-white" />
                 </div>
                 <div>
@@ -141,19 +213,10 @@ export default function ContentPreview({
                   </p>
                 </div>
               </div>
-              <div className="flex items-center gap-2 p-4 bg-white/80 backdrop-blur-sm rounded-xl border border-slate-200 shadow-sm">
-                <Sparkles className="h-5 w-5 text-indigo-600 flex-shrink-0" />
-                <p className="text-base text-slate-700">
-                  <span className="font-bold text-slate-900">Topic:</span> {content.topic}
-                </p>
-              </div>
             </div>
             <Badge
               variant={content.status === 'approved' ? 'default' : 'secondary'}
-              className={`px-5 py-2.5 text-base font-semibold shadow-md transition-all duration-[400ms] ease-[cubic-bezier(0.23,1,0.32,1)] hover:scale-105 ${content.status === 'approved'
-                ? 'bg-gradient-to-r from-green-600 to-emerald-600'
-                : 'bg-gradient-to-r from-amber-500 to-orange-500'
-                }`}
+              className="px-5 py-2.5 text-base font-semibold shadow-md"
             >
               {content.status.replace('_', ' ')}
             </Badge>
@@ -161,137 +224,138 @@ export default function ContentPreview({
         </CardHeader>
       </Card>
 
-      
-
-      {/* Related Videos Section - NEW */}
-      {videos && videos.length > 0 && (
-        
-        <Card className="border-0 shadow-2xl bg-white/80 backdrop-blur-sm overflow-hidden hover:shadow-3xl transition-all duration-[400ms] ease-[cubic-bezier(0.23,1,0.32,1)] hover:-translate-y-1 group">
-          <CardHeader className="flex flex-row items-center justify-between bg-gradient-to-r from-purple-50 via-pink-50 to-red-50 border-b-2 border-slate-100">
-            <CardTitle className="flex items-center gap-3 text-xl">
-              <div className="p-3 bg-gradient-to-br from-purple-600 to-pink-600 rounded-xl shadow-lg transition-transform duration-[400ms] ease-[cubic-bezier(0.23,1,0.32,1)] group-hover:scale-110 group-hover:rotate-3">
-                <Video className="h-6 w-6 text-white" />
+      {/* Image Preview */}
+      <Card className="border-0 shadow-2xl bg-white/80">
+        <CardHeader className="flex flex-row items-center justify-between bg-gradient-to-r from-indigo-50 via-purple-50 to-pink-50 border-b-2 border-slate-100">
+          <CardTitle className="flex items-center gap-3 text-xl">
+            <div className="p-3 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-xl shadow-lg">
+              <ImageIcon className="h-6 w-6 text-white" />
+            </div>
+            <span className="bg-gradient-to-r from-indigo-700 to-purple-700 bg-clip-text text-transparent font-bold">
+              Generated Image
+            </span>
+          </CardTitle>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={onRegenerateImage}
+            disabled={isLoading}
+            className="hover:bg-white hover:border-indigo-300"
+          >
+            <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
+            Regenerate
+          </Button>
+        </CardHeader>
+        <CardContent className="p-6">
+          {content.image_url ? (
+            <div className="relative w-full aspect-video rounded-2xl overflow-hidden bg-gradient-to-br from-slate-100 to-slate-200 shadow-2xl">
+              <Image
+                src={content.image_url}
+                alt="Generated content"
+                fill
+                className="object-cover"
+                unoptimized
+              />
+            </div>
+          ) : (
+            <div className="w-full aspect-video rounded-2xl bg-gradient-to-br from-slate-100 to-slate-300 flex items-center justify-center">
+              <div className="text-center">
+                <ImageIcon className="h-12 w-12 text-slate-400 mx-auto mb-2" />
+                <p className="text-slate-500 font-medium">No image generated</p>
               </div>
-              <span className="bg-gradient-to-r from-purple-700 to-pink-700 bg-clip-text text-transparent font-bold">
-                Related Videos from Pexels
-              </span>
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="p-6">
-            {/* Main Video Player */}
-            {selectedVideo && (
-              <div className="mb-6">
-                <div className="relative rounded-xl overflow-hidden shadow-2xl bg-black">
-                  <video
-                    key={selectedVideo.id}
-                    controls
-                    className="w-full max-h-[500px]"
-                    poster={selectedVideo.image}
-                    autoPlay
-                  >
-                    <source src={selectedVideo.video_url} type="video/mp4" />
-                    Your browser does not support the video tag.
-                  </video>
-                </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
-                {/* Video Attribution */}
-                <div className="mt-4 flex items-center justify-between p-4 bg-gradient-to-r from-purple-50 to-pink-50 rounded-lg border border-purple-100">
-                  <div className="text-sm text-gray-700">
-                    Video by{' '}
-                    <a
-                      href={selectedVideo.user.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-purple-600 hover:text-purple-700 font-semibold hover:underline transition-colors inline-flex items-center gap-1"
-                    >
-                      {selectedVideo.user.name}
-                      <ExternalLink className="h-3 w-3" />
-                    </a>
-                    {' '}on{' '}
-                    <a
-                      href="https://www.pexels.com"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-purple-600 hover:text-purple-700 font-semibold hover:underline transition-colors inline-flex items-center gap-1"
-                    >
-                      Pexels
-                      <ExternalLink className="h-3 w-3" />
-                    </a>
-                  </div>
-                  <div className="text-sm text-gray-500 flex items-center gap-2">
-                    <Video className="h-4 w-4" />
-                    {selectedVideo.duration}s
-                  </div>
-                </div>
+      {/* Video Suggestions */}
+      <Card className="border-0 shadow-2xl bg-white/80">
+        <CardHeader className="bg-gradient-to-r from-purple-50 via-pink-50 to-purple-50 border-b-2 border-slate-100">
+          <CardTitle className="flex items-center gap-3 text-xl">
+            <div className="p-3 bg-gradient-to-br from-purple-600 to-pink-600 rounded-xl shadow-lg">
+              <Video className="h-6 w-6 text-white" />
+            </div>
+            <span className="bg-gradient-to-r from-purple-700 to-pink-700 bg-clip-text text-transparent font-bold">
+              Suggested Videos from Pexels
+            </span>
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-6">
+          {isLoadingVideos ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="h-8 w-8 animate-spin text-purple-600" />
+              <span className="ml-3 text-slate-600">Searching for videos...</span>
+            </div>
+          ) : videoError ? (
+            <div className="text-center py-12">
+              <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-red-100 mb-4">
+                <X className="h-8 w-8 text-red-600" />
               </div>
-            )}
-
-            {/* Video Thumbnails Grid */}
-            <div>
-              <p className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
-                <Sparkles className="h-4 w-4 text-purple-600" />
-                Select a video ({videos.length} available):
-              </p>
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
-                {videos.map((video) => (
-                  <div
-                    key={video.id}
-                    onClick={() => onVideoSelect?.(video)}
-                    className={`cursor-pointer rounded-lg overflow-hidden border-3 transition-all hover:scale-105 ${
-                      selectedVideo?.id === video.id
-                        ? 'border-purple-500 ring-2 ring-purple-300 shadow-lg'
-                        : 'border-gray-200 hover:border-purple-300 hover:shadow-md'
-                    }`}
-                  >
-                    <div className="relative">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={video.image}
-                        alt="Video thumbnail"
-                        className="w-full h-24 object-cover"
-                      />
-                      {/* Play Icon Overlay */}
-                      <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-40">
-                        <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center opacity-90 hover:opacity-100 transition-opacity">
-                          <svg className="w-5 h-5 text-purple-600 ml-0.5" fill="currentColor" viewBox="0 0 20 20">
-                            <path d="M6.3 2.841A1.5 1.5 0 004 4.11V15.89a1.5 1.5 0 002.3 1.269l9.344-5.89a1.5 1.5 0 000-2.538L6.3 2.84z" />
-                          </svg>
-                        </div>
-                      </div>
-                      {/* Duration Badge */}
-                      <div className="absolute bottom-2 right-2 bg-black bg-opacity-75 text-white text-xs px-2 py-1 rounded-md font-semibold">
-                        {video.duration}s
-                      </div>
+              <p className="text-red-600 font-medium mb-2">Video Search Failed</p>
+              <p className="text-sm text-slate-600 mb-4">{videoError}</p>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => fetchVideos(content.image_prompt || content.topic)}
+              >
+                <RefreshCw className="h-4 w-4 mr-2" />
+                Try Again
+              </Button>
+            </div>
+          ) : videos.length === 0 ? (
+            <div className="text-center py-12">
+              <Video className="h-12 w-12 text-slate-400 mx-auto mb-4" />
+              <p className="text-slate-600 font-medium mb-2">No videos found</p>
+              <p className="text-sm text-slate-500">Try a different search term</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {videos.map((video) => (
+                <div
+                  key={video.id}
+                  className="group relative rounded-xl overflow-hidden border-2 border-slate-200 hover:border-purple-300 transition-all hover:shadow-lg"
+                >
+                  <div className="relative aspect-video bg-slate-100">
+                    <Image
+                      src={video.image}
+                      alt="Video preview"
+                      fill
+                      className="object-cover"
+                      unoptimized
+                    />
+                    <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                      <Video className="h-12 w-12 text-white" />
                     </div>
                   </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Video Info Card */}
-            <div className="mt-6 p-5 bg-gradient-to-r from-purple-50 to-pink-50 rounded-xl border-2 border-purple-100">
-              <div className="flex items-start gap-3">
-                <Video className="h-5 w-5 text-purple-600 flex-shrink-0 mt-0.5" />
-                <div>
-                  <p className="text-sm font-semibold text-purple-900 mb-1">
-                    About These Videos
-                  </p>
-                  <p className="text-sm text-purple-700">
-                    These videos are sourced from Pexels and match your content theme. 
-                    Videos are stored locally and not saved to the database. Click any thumbnail to preview.
-                  </p>
+                  <div className="p-3 bg-white">
+                    <p className="text-xs text-slate-600 mb-2">
+                      Duration: {Math.floor(video.duration)}s | {video.width}x{video.height}
+                    </p>
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs text-slate-500">by {video.user.name}</p>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => window.open(video.video_url, '_blank')}
+                        className="h-8 px-2"
+                      >
+                        <ExternalLink className="h-3 w-3 mr-1" />
+                        View
+                      </Button>
+                    </div>
+                  </div>
                 </div>
-              </div>
+              ))}
             </div>
-          </CardContent>
-        </Card>
-      )}
+          )}
+        </CardContent>
+      </Card>
 
       {/* Captions Preview */}
-      <Card className="border-0 shadow-2xl bg-white/80 backdrop-blur-sm hover:shadow-3xl transition-all duration-[400ms] ease-[cubic-bezier(0.23,1,0.32,1)] hover:-translate-y-1 group">
+      <Card className="border-0 shadow-2xl bg-white/80">
         <CardHeader className="flex flex-row items-center justify-between bg-gradient-to-r from-slate-50 via-blue-50 to-indigo-50 border-b-2 border-slate-100">
           <CardTitle className="text-xl font-bold flex items-center gap-3">
-            <div className="p-2.5 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-xl shadow-lg transition-transform duration-[400ms] ease-[cubic-bezier(0.23,1,0.32,1)] group-hover:scale-110 group-hover:rotate-3">
+            <div className="p-2.5 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-xl shadow-lg">
               <Sparkles className="h-5 w-5 text-white" />
             </div>
             <span className="bg-gradient-to-r from-blue-700 to-indigo-700 bg-clip-text text-transparent">
@@ -303,37 +367,27 @@ export default function ContentPreview({
             size="sm"
             onClick={onRegenerateCaptions}
             disabled={isLoading}
-            className="hover:bg-white hover:border-indigo-300 rounded-lg shadow-sm hover:shadow-md transition-all duration-[400ms] ease-[cubic-bezier(0.23,1,0.32,1)] hover:-translate-y-0.5 group/btn border-2"
           >
-            <RefreshCw className={`h-4 w-4 mr-2 transition-transform duration-[400ms] ease-[cubic-bezier(0.23,1,0.32,1)] ${isLoading ? 'animate-spin' : 'group-hover/btn:rotate-180'}`} />
+            <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
             Regenerate All
           </Button>
         </CardHeader>
         <CardContent className="p-6">
           <Tabs defaultValue="facebook" className="w-full">
-            <TabsList className="grid w-full grid-cols-5 bg-gradient-to-r from-slate-100 via-slate-50 to-slate-100 p-1.5 rounded-xl shadow-inner border border-slate-200">
+            <TabsList className="grid w-full grid-cols-5">
               {platforms.map((platform) => (
-                <TabsTrigger
-                  key={platform.name}
-                  value={platform.name.toLowerCase()}
-                  className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-lg transition-all duration-[400ms] ease-[cubic-bezier(0.23,1,0.32,1)] hover:bg-white/50 data-[state=active]:scale-105"
-                >
+                <TabsTrigger key={platform.name} value={platform.name.toLowerCase()}>
                   <platform.icon className={`h-4 w-4 mr-1.5 ${platform.color}`} />
-                  <span className="hidden sm:inline font-semibold">{platform.name}</span>
+                  <span className="hidden sm:inline">{platform.name}</span>
                 </TabsTrigger>
               ))}
             </TabsList>
             {platforms.map((platform) => (
-              <TabsContent
-                key={platform.name}
-                value={platform.name.toLowerCase()}
-                className="space-y-4 mt-6 animate-in fade-in slide-in-from-bottom-2 duration-500"
-              >
-                <div className={`p-8 ${platform.bgColor} rounded-2xl border-2 ${platform.borderColor} relative shadow-lg hover:shadow-xl transition-all duration-[400ms] ease-[cubic-bezier(0.23,1,0.32,1)] hover:-translate-y-1 group/caption`}>
-                  <div className="absolute top-0 right-0 w-40 h-40 bg-white/20 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2"></div>
-                  <div className="flex items-center justify-between mb-5 relative">
+              <TabsContent key={platform.name} value={platform.name.toLowerCase()} className="space-y-4 mt-6">
+                <div className={`p-8 ${platform.bgColor} rounded-2xl border-2 ${platform.borderColor}`}>
+                  <div className="flex items-center justify-between mb-5">
                     <div className="flex items-center gap-4">
-                      <div className={`p-3 bg-white rounded-xl shadow-md transition-transform duration-[400ms] ease-[cubic-bezier(0.23,1,0.32,1)] group-hover/caption:scale-110 group-hover/caption:rotate-3`}>
+                      <div className="p-3 bg-white rounded-xl shadow-md">
                         <platform.icon className={`h-7 w-7 ${platform.color}`} />
                       </div>
                       <span className="font-bold text-xl text-slate-900">{platform.name}</span>
@@ -342,25 +396,15 @@ export default function ContentPreview({
                       variant="ghost"
                       size="sm"
                       onClick={() => copyToClipboard(platform.caption || '', platform.name)}
-                      className="hover:bg-white/70 rounded-lg shadow-sm hover:shadow-md transition-all duration-[400ms] ease-[cubic-bezier(0.23,1,0.32,1)] hover:-translate-y-0.5 group/copy"
                     >
-                      <Copy className="h-4 w-4 mr-2 transition-transform duration-[400ms] ease-[cubic-bezier(0.23,1,0.32,1)] group-hover/copy:scale-110" />
-                      <span className="font-medium">Copy</span>
+                      <Copy className="h-4 w-4 mr-2" />
+                      Copy
                     </Button>
                   </div>
-                  <div className="relative p-5 bg-white/60 backdrop-blur-sm rounded-xl border border-white/40 shadow-inner">
-                    <p className="text-slate-800 whitespace-pre-wrap leading-relaxed text-base">
+                  <div className="p-5 bg-white/60 rounded-xl">
+                    <p className="text-slate-800 whitespace-pre-wrap leading-relaxed">
                       {platform.caption || 'No caption generated'}
                     </p>
-                  </div>
-                  <div className="mt-5 pt-4 border-t-2 border-white/40 flex items-center justify-between">
-                    <span className="text-sm font-bold text-slate-700 flex items-center gap-2">
-                      <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-                      {platform.caption?.length || 0} characters
-                    </span>
-                    <span className="text-xs text-slate-600 bg-white/60 px-3 py-1.5 rounded-full font-medium shadow-sm">
-                      Optimized for {platform.name}
-                    </span>
                   </div>
                 </div>
               </TabsContent>
@@ -371,68 +415,27 @@ export default function ContentPreview({
 
       {/* Action Buttons */}
       {content.status === 'pending_approval' && (
-        <Card className="border-0 shadow-2xl bg-gradient-to-br from-white via-slate-50 to-white hover:shadow-3xl transition-all duration-[400ms] ease-[cubic-bezier(0.23,1,0.32,1)] hover:-translate-y-1 relative overflow-hidden">
-          <div className="absolute inset-0 bg-gradient-to-br from-green-400/5 via-transparent to-red-400/5"></div>
-          <CardContent className="pt-8 pb-8 relative">
-            <div className="text-center mb-6">
-              <h3 className="text-2xl font-bold text-slate-900 mb-2">Ready to Proceed?</h3>
-              <p className="text-slate-600">Choose an action to continue with your content</p>
-            </div>
+        <Card className="border-0 shadow-2xl">
+          <CardContent className="pt-8 pb-8">
             <div className="flex flex-col sm:flex-row gap-5">
               <Button
                 onClick={handleApproveAndPublish}
                 size="lg"
-                className="flex-1 h-20 text-xl font-bold bg-gradient-to-r from-green-600 via-emerald-600 to-green-600 hover:from-green-700 hover:via-emerald-700 hover:to-green-700 shadow-xl hover:shadow-2xl transition-all duration-[400ms] ease-[cubic-bezier(0.23,1,0.32,1)] rounded-2xl hover:-translate-y-1 group relative overflow-hidden"
+                className="flex-1 h-20 text-xl font-bold bg-gradient-to-r from-green-600 to-emerald-600"
                 disabled={isLoading}
               >
-                <div className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/20 to-white/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000"></div>
-                <Check className="mr-3 h-7 w-7 transition-transform duration-[400ms] ease-[cubic-bezier(0.23,1,0.32,1)] group-hover:scale-110 group-hover:rotate-12" />
-                <span>Approve & Save Content</span>
+                <Check className="mr-3 h-7 w-7" />
+                Approve & Save Content
               </Button>
               <Button
                 onClick={onReject}
                 size="lg"
                 variant="outline"
-                className="flex-1 h-20 text-xl font-bold border-3 border-red-600 text-red-600 hover:bg-red-50 hover:border-red-700 shadow-lg hover:shadow-xl transition-all duration-[400ms] ease-[cubic-bezier(0.23,1,0.32,1)] rounded-2xl hover:-translate-y-1 group"
+                className="flex-1 h-20 text-xl font-bold"
                 disabled={isLoading}
               >
-                <X className="mr-3 h-7 w-7 transition-transform duration-[400ms] ease-[cubic-bezier(0.23,1,0.32,1)] group-hover:scale-110 group-hover:rotate-90" />
-                <span>Reject & Regenerate</span>
-              </Button>
-            </div>
-            <div className="mt-6 p-4 bg-gradient-to-r from-indigo-50 to-purple-50 rounded-xl border-2 border-indigo-100">
-              <p className="text-sm text-slate-700 text-center flex items-center justify-center gap-2">
-                <Sparkles className="h-4 w-4 text-indigo-600" />
-                <span><strong>Tip:</strong> Approve to save this content to your library, or reject to generate a fresh version</span>
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Approved Content Actions */}
-      {content.status === 'approved' && (
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex gap-4">
-              <Button
-                onClick={() => setPublishDialogOpen(true)}
-                size="lg"
-                className="flex-1"
-                disabled={isLoading}
-              >
-                <Send className="mr-2 h-5 w-5" />
-                Publish Now
-              </Button>
-              <Button
-                onClick={() => setPublishDialogOpen(true)}
-                size="lg"
-                variant="outline"
-                className="flex-1"
-                disabled={isLoading}
-              >
-                <Clock className="mr-2 h-5 w-5" />
-                Schedule Post
+                <X className="mr-3 h-7 w-7" />
+                Reject & Regenerate
               </Button>
             </div>
           </CardContent>
