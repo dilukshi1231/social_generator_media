@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
-import { Check, X, RefreshCw, Facebook, Instagram, Linkedin, Twitter, Image as ImageIcon, Copy, Sparkles, Send, Clock } from 'lucide-react';
+import { Check, X, RefreshCw, Facebook, Instagram, Linkedin, Twitter, Image as ImageIcon, Copy, Sparkles, Send, Clock, Video, ExternalLink } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import type { Content } from '@/types';
 import Image from 'next/image';
@@ -18,14 +18,31 @@ const XIcon = ({ className }: { className?: string }) => (
   </svg>
 );
 
+// Pexels Video Interface
+interface PexelsVideo {
+  id: number;
+  url: string;
+  video_url: string;
+  width: number;
+  height: number;
+  duration: number;
+  image: string;
+  user: {
+    name: string;
+    url: string;
+  };
+}
+
 interface ContentPreviewProps {
   content: Content;
-  // Return boolean to indicate success; supports async handlers
   onApprove?: () => Promise<boolean | void> | boolean | void;
   onReject: () => void;
   onRegenerateCaptions: () => void;
   onRegenerateImage: () => void;
   isLoading?: boolean;
+  videos?: PexelsVideo[];
+  selectedVideo?: PexelsVideo | null;
+  onVideoSelect?: (video: PexelsVideo) => void;
 }
 
 export default function ContentPreview({
@@ -35,6 +52,9 @@ export default function ContentPreview({
   onRegenerateCaptions,
   onRegenerateImage,
   isLoading = false,
+  videos = [],
+  selectedVideo = null,
+  onVideoSelect,
 }: ContentPreviewProps) {
   const { toast } = useToast();
   const [publishDialogOpen, setPublishDialogOpen] = useState(false);
@@ -43,7 +63,7 @@ export default function ContentPreview({
     if (onApprove) {
       const result = await onApprove();
       if (result === false) {
-        return; // Abort opening dialog on failure
+        return;
       }
     }
     setPublishDialogOpen(true);
@@ -141,59 +161,131 @@ export default function ContentPreview({
         </CardHeader>
       </Card>
 
-      {/* Image Preview */}
-      <Card className="border-0 shadow-2xl bg-white/80 backdrop-blur-sm overflow-hidden hover:shadow-3xl transition-all duration-[400ms] ease-[cubic-bezier(0.23,1,0.32,1)] hover:-translate-y-1 group">
-        <CardHeader className="flex flex-row items-center justify-between bg-gradient-to-r from-indigo-50 via-purple-50 to-pink-50 border-b-2 border-slate-100">
-          <CardTitle className="flex items-center gap-3 text-xl">
-            <div className="p-3 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-xl shadow-lg transition-transform duration-[400ms] ease-[cubic-bezier(0.23,1,0.32,1)] group-hover:scale-110 group-hover:rotate-3">
-              <ImageIcon className="h-6 w-6 text-white" />
-            </div>
-            <span className="bg-gradient-to-r from-indigo-700 to-purple-700 bg-clip-text text-transparent font-bold">
-              Generated Image
-            </span>
-          </CardTitle>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={onRegenerateImage}
-            disabled={isLoading}
-            className="hover:bg-white hover:border-indigo-300 rounded-lg shadow-sm hover:shadow-md transition-all duration-[400ms] ease-[cubic-bezier(0.23,1,0.32,1)] hover:-translate-y-0.5 group/btn border-2"
-          >
-            <RefreshCw className={`h-4 w-4 mr-2 transition-transform duration-[400ms] ease-[cubic-bezier(0.23,1,0.32,1)] ${isLoading ? 'animate-spin' : 'group-hover/btn:rotate-180'}`} />
-            Regenerate
-          </Button>
-        </CardHeader>
-        <CardContent className="p-6">
-          {content.image_url ? (
-            <div className="relative w-full aspect-video rounded-2xl overflow-hidden bg-gradient-to-br from-slate-100 to-slate-200 shadow-2xl ring-4 ring-indigo-100 hover:ring-indigo-200 transition-all duration-[400ms] ease-[cubic-bezier(0.23,1,0.32,1)] cursor-pointer group/image">
-              <Image
-                src={content.image_url}
-                alt="Generated content"
-                fill
-                className="object-cover transition-transform duration-500 ease-[cubic-bezier(0.23,1,0.32,1)] group-hover/image:scale-105"
-                unoptimized
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent opacity-0 group-hover/image:opacity-100 transition-opacity duration-[400ms] ease-[cubic-bezier(0.23,1,0.32,1)]" />
-            </div>
-          ) : (
-            <div className="w-full aspect-video rounded-2xl bg-gradient-to-br from-slate-100 via-slate-200 to-slate-300 flex items-center justify-center border-2 border-dashed border-slate-300">
-              <div className="text-center">
-                <ImageIcon className="h-12 w-12 text-slate-400 mx-auto mb-2" />
-                <p className="text-slate-500 font-medium">No image generated</p>
+      
+
+      {/* Related Videos Section - NEW */}
+      {videos && videos.length > 0 && (
+        
+        <Card className="border-0 shadow-2xl bg-white/80 backdrop-blur-sm overflow-hidden hover:shadow-3xl transition-all duration-[400ms] ease-[cubic-bezier(0.23,1,0.32,1)] hover:-translate-y-1 group">
+          <CardHeader className="flex flex-row items-center justify-between bg-gradient-to-r from-purple-50 via-pink-50 to-red-50 border-b-2 border-slate-100">
+            <CardTitle className="flex items-center gap-3 text-xl">
+              <div className="p-3 bg-gradient-to-br from-purple-600 to-pink-600 rounded-xl shadow-lg transition-transform duration-[400ms] ease-[cubic-bezier(0.23,1,0.32,1)] group-hover:scale-110 group-hover:rotate-3">
+                <Video className="h-6 w-6 text-white" />
+              </div>
+              <span className="bg-gradient-to-r from-purple-700 to-pink-700 bg-clip-text text-transparent font-bold">
+                Related Videos from Pexels
+              </span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-6">
+            {/* Main Video Player */}
+            {selectedVideo && (
+              <div className="mb-6">
+                <div className="relative rounded-xl overflow-hidden shadow-2xl bg-black">
+                  <video
+                    key={selectedVideo.id}
+                    controls
+                    className="w-full max-h-[500px]"
+                    poster={selectedVideo.image}
+                    autoPlay
+                  >
+                    <source src={selectedVideo.video_url} type="video/mp4" />
+                    Your browser does not support the video tag.
+                  </video>
+                </div>
+
+                {/* Video Attribution */}
+                <div className="mt-4 flex items-center justify-between p-4 bg-gradient-to-r from-purple-50 to-pink-50 rounded-lg border border-purple-100">
+                  <div className="text-sm text-gray-700">
+                    Video by{' '}
+                    <a
+                      href={selectedVideo.user.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-purple-600 hover:text-purple-700 font-semibold hover:underline transition-colors inline-flex items-center gap-1"
+                    >
+                      {selectedVideo.user.name}
+                      <ExternalLink className="h-3 w-3" />
+                    </a>
+                    {' '}on{' '}
+                    <a
+                      href="https://www.pexels.com"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-purple-600 hover:text-purple-700 font-semibold hover:underline transition-colors inline-flex items-center gap-1"
+                    >
+                      Pexels
+                      <ExternalLink className="h-3 w-3" />
+                    </a>
+                  </div>
+                  <div className="text-sm text-gray-500 flex items-center gap-2">
+                    <Video className="h-4 w-4" />
+                    {selectedVideo.duration}s
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Video Thumbnails Grid */}
+            <div>
+              <p className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+                <Sparkles className="h-4 w-4 text-purple-600" />
+                Select a video ({videos.length} available):
+              </p>
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
+                {videos.map((video) => (
+                  <div
+                    key={video.id}
+                    onClick={() => onVideoSelect?.(video)}
+                    className={`cursor-pointer rounded-lg overflow-hidden border-3 transition-all hover:scale-105 ${
+                      selectedVideo?.id === video.id
+                        ? 'border-purple-500 ring-2 ring-purple-300 shadow-lg'
+                        : 'border-gray-200 hover:border-purple-300 hover:shadow-md'
+                    }`}
+                  >
+                    <div className="relative">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={video.image}
+                        alt="Video thumbnail"
+                        className="w-full h-24 object-cover"
+                      />
+                      {/* Play Icon Overlay */}
+                      <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-40">
+                        <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center opacity-90 hover:opacity-100 transition-opacity">
+                          <svg className="w-5 h-5 text-purple-600 ml-0.5" fill="currentColor" viewBox="0 0 20 20">
+                            <path d="M6.3 2.841A1.5 1.5 0 004 4.11V15.89a1.5 1.5 0 002.3 1.269l9.344-5.89a1.5 1.5 0 000-2.538L6.3 2.84z" />
+                          </svg>
+                        </div>
+                      </div>
+                      {/* Duration Badge */}
+                      <div className="absolute bottom-2 right-2 bg-black bg-opacity-75 text-white text-xs px-2 py-1 rounded-md font-semibold">
+                        {video.duration}s
+                      </div>
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
-          )}
-          {content.image_prompt && (
-            <div className="mt-6 p-5 bg-gradient-to-r from-indigo-50 via-purple-50 to-pink-50 rounded-xl border-2 border-indigo-100 shadow-sm hover:shadow-md transition-all duration-[400ms] ease-[cubic-bezier(0.23,1,0.32,1)]">
-              <p className="text-xs font-bold text-indigo-900 uppercase tracking-wider mb-3 flex items-center gap-2">
-                <Sparkles className="h-3.5 w-3.5" />
-                Image Prompt:
-              </p>
-              <p className="text-sm text-slate-700 leading-relaxed">{content.image_prompt}</p>
+
+            {/* Video Info Card */}
+            <div className="mt-6 p-5 bg-gradient-to-r from-purple-50 to-pink-50 rounded-xl border-2 border-purple-100">
+              <div className="flex items-start gap-3">
+                <Video className="h-5 w-5 text-purple-600 flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-sm font-semibold text-purple-900 mb-1">
+                    About These Videos
+                  </p>
+                  <p className="text-sm text-purple-700">
+                    These videos are sourced from Pexels and match your content theme. 
+                    Videos are stored locally and not saved to the database. Click any thumbnail to preview.
+                  </p>
+                </div>
+              </div>
             </div>
-          )}
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Captions Preview */}
       <Card className="border-0 shadow-2xl bg-white/80 backdrop-blur-sm hover:shadow-3xl transition-all duration-[400ms] ease-[cubic-bezier(0.23,1,0.32,1)] hover:-translate-y-1 group">

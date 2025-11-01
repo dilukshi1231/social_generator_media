@@ -8,9 +8,30 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/components/ui/use-toast';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
-import { X, Maximize2, Send, Facebook, Instagram, Linkedin, Twitter, Image as ImageIcon } from 'lucide-react';
+import { X, Maximize2, Send, Facebook, Instagram, Linkedin, Twitter, Image as ImageIcon, Video, Loader2, Play, ExternalLink } from 'lucide-react';
 import type { Content } from '@/types';
 import PublishDialog from '@/components/content/publish-dialog';
+
+interface Video {
+    id: number;
+    url: string;
+    video_url: string;
+    width: number;
+    height: number;
+    duration: number;
+    image: string;
+    user: {
+        name: string;
+        url: string;
+    };
+}
+
+interface VideoSearchResponse {
+    success: boolean;
+    query: string;
+    total_results: number;
+    videos: Video[];
+}
 
 export default function ContentDetailPage() {
     const params = useParams();
@@ -20,11 +41,13 @@ export default function ContentDetailPage() {
     const [isLoading, setIsLoading] = useState(true);
     const [isImageModalOpen, setIsImageModalOpen] = useState(false);
     const [publishOpen, setPublishOpen] = useState(false);
+    const [videos, setVideos] = useState<Video[]>([]);
+    const [isLoadingVideos, setIsLoadingVideos] = useState(false);
+    const [selectedVideo, setSelectedVideo] = useState<Video | null>(null);
 
     const fetchContent = useCallback(async (id: string) => {
         try {
             setIsLoading(true);
-
             const res = await contentAPI.get(parseInt(id, 10));
             setContent(res.data as Content);
         } catch {
@@ -35,12 +58,63 @@ export default function ContentDetailPage() {
         }
     }, [router, toast]);
 
+    const fetchVideos = useCallback(async (prompt: string) => {
+        try {
+            setIsLoadingVideos(true);
+            const token = localStorage.getItem('access_token');
+            
+            if (!token) {
+                throw new Error('No access token found');
+            }
+
+            const response = await fetch(
+                `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/v1/content/search-videos`,
+                {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        prompt: prompt,
+                        per_page: 5
+                    })
+                }
+            );
+
+            if (!response.ok) {
+                throw new Error('Failed to fetch videos');
+            }
+
+            const data: VideoSearchResponse = await response.json();
+            
+            if (data.success && data.videos.length > 0) {
+                setVideos(data.videos);
+            }
+        } catch (error) {
+            console.error('Error fetching videos:', error);
+            toast({
+                title: 'Video search failed',
+                description: 'Could not fetch videos from Pexels',
+                variant: 'destructive'
+            });
+        } finally {
+            setIsLoadingVideos(false);
+        }
+    }, [toast]);
+
     useEffect(() => {
         const id = params?.id;
         if (!id) return;
         const idStr = Array.isArray(id) ? id[0] : id;
         fetchContent(idStr);
     }, [params, fetchContent]);
+
+    useEffect(() => {
+        if (content?.image_prompt) {
+            fetchVideos(content.image_prompt);
+        }
+    }, [content?.image_prompt, fetchVideos]);
 
     if (isLoading) {
         return (
@@ -180,6 +254,77 @@ export default function ContentDetailPage() {
                 </Card>
             </div>
 
+            {/* Videos Section */}
+            <Card className="border border-slate-200/60 shadow-sm bg-white overflow-hidden">
+                <CardHeader>
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <CardTitle className="flex items-center gap-2">
+                                <Video className="h-5 w-5 text-purple-600" />
+                                Suggested Videos from Pexels
+                            </CardTitle>
+                            <CardDescription>High-quality stock videos related to your content</CardDescription>
+                        </div>
+                        {isLoadingVideos && (
+                            <Loader2 className="h-5 w-5 animate-spin text-purple-600" />
+                        )}
+                    </div>
+                </CardHeader>
+                <CardContent>
+                    {isLoadingVideos ? (
+                        <div className="flex items-center justify-center py-12">
+                            <div className="text-center">
+                                <Loader2 className="h-8 w-8 animate-spin text-purple-600 mx-auto mb-3" />
+                                <p className="text-sm text-slate-600">Searching for videos...</p>
+                            </div>
+                        </div>
+                    ) : videos.length === 0 ? (
+                        <div className="text-center py-12">
+                            <Video className="h-12 w-12 text-slate-300 mx-auto mb-3" />
+                            <p className="text-slate-600">No videos found for this content</p>
+                        </div>
+                    ) : (
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                            {videos.map((video) => (
+                                <div
+                                    key={video.id}
+                                    className="group relative rounded-lg overflow-hidden border border-slate-200 hover:border-purple-300 hover:shadow-lg transition-all duration-300 cursor-pointer"
+                                    onClick={() => setSelectedVideo(video)}
+                                >
+                                    {/* Video Thumbnail */}
+                                    <div className="relative aspect-video bg-slate-100">
+                                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                                        <img
+                                            src={video.image}
+                                            alt={`Video ${video.id}`}
+                                            className="w-full h-full object-cover"
+                                        />
+                                        <div className="absolute inset-0 bg-black/30 group-hover:bg-black/40 transition-colors flex items-center justify-center">
+                                            <div className="bg-white/90 backdrop-blur-sm p-3 rounded-full shadow-lg group-hover:scale-110 transition-transform">
+                                                <Play className="h-6 w-6 text-purple-600" />
+                                            </div>
+                                        </div>
+                                        <div className="absolute bottom-2 right-2 bg-black/70 text-white text-xs px-2 py-1 rounded">
+                                            {Math.floor(video.duration)}s
+                                        </div>
+                                    </div>
+                                    
+                                    {/* Video Info */}
+                                    <div className="p-3 bg-white">
+                                        <p className="text-xs text-slate-600 flex items-center gap-1">
+                                            <span>By {video.user.name}</span>
+                                        </p>
+                                        <p className="text-xs text-slate-500 mt-1">
+                                            {video.width} × {video.height}
+                                        </p>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </CardContent>
+            </Card>
+
             {/* Full Screen Image Modal */}
             <Dialog open={isImageModalOpen} onOpenChange={setIsImageModalOpen}>
                 <DialogContent className="max-w-7xl w-[95vw] h-[95vh] p-0 bg-black/95 border-0 overflow-hidden">
@@ -201,6 +346,47 @@ export default function ContentDetailPage() {
                             />
                         ) : (
                             <div className="text-white/80">No image available</div>
+                        )}
+                    </div>
+                </DialogContent>
+            </Dialog>
+
+            {/* Video Player Modal */}
+            <Dialog open={!!selectedVideo} onOpenChange={() => setSelectedVideo(null)}>
+                <DialogContent className="max-w-7xl w-[95vw] h-[95vh] p-0 bg-black/95 border-0 overflow-hidden">
+                    <div className="relative w-full h-full flex flex-col items-center justify-center p-6">
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            className="absolute top-4 right-4 z-10 bg-white/10 hover:bg-white/20 backdrop-blur-sm text-white rounded-full w-10 h-10"
+                            onClick={() => setSelectedVideo(null)}
+                        >
+                            <X className="h-5 w-5" />
+                        </Button>
+                        
+                        {selectedVideo && (
+                            <>
+                                <video
+                                    src={selectedVideo.video_url}
+                                    controls
+                                    autoPlay
+                                    className="max-w-full max-h-[80vh] rounded-lg shadow-2xl"
+                                />
+                                <div className="mt-4 flex items-center gap-4">
+                                    <a
+                                        href={selectedVideo.url}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="flex items-center gap-2 text-white/80 hover:text-white transition-colors text-sm"
+                                    >
+                                        <ExternalLink className="h-4 w-4" />
+                                        View on Pexels
+                                    </a>
+                                    <span className="text-white/60 text-sm">
+                                        Video by {selectedVideo.user.name}
+                                    </span>
+                                </div>
+                            </>
                         )}
                     </div>
                 </DialogContent>

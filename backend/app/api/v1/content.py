@@ -12,12 +12,74 @@ from app.models.content import Content, ContentStatus
 from app.api.v1.auth import get_current_user
 from app.services.content_generator import ContentGeneratorService
 from pydantic import BaseModel
+# Add these imports at the top of content.py
+from app.services.pexels_service import PexelsService
 
 
 router = APIRouter()
 
 
 # Schemas
+
+# Add this new schema class with the other schemas
+class VideoSearchRequest(BaseModel):
+    prompt: str
+    per_page: int = 5
+
+class VideoSearchResponse(BaseModel):
+    success: bool
+    query: str
+    total_results: int
+    videos: List[dict]
+
+# Add this new endpoint at the end of content.py
+@router.post("/search-videos", response_model=VideoSearchResponse)
+async def search_videos(
+    request: VideoSearchRequest,
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Search for videos on Pexels based on the prompt.
+    """
+    print(f"[VIDEO SEARCH] User: {current_user.email}")
+    print(f"[VIDEO SEARCH] Prompt: {request.prompt}")
+    print(f"[VIDEO SEARCH] Per page: {request.per_page}")
+    
+    try:
+        pexels = PexelsService()
+        result = await pexels.search_videos(
+            query=request.prompt,
+            per_page=request.per_page
+        )
+        
+        print(f"[VIDEO SEARCH] Result success: {result.get('success')}")
+        print(f"[VIDEO SEARCH] Videos found: {len(result.get('videos', []))}")
+        
+        if not result.get("success"):
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=result.get("error", "Failed to search videos")
+            )
+        
+        return VideoSearchResponse(
+            success=True,
+            query=result["query"],
+            total_results=result["total_results"],
+            videos=result["videos"]
+        )
+        
+    except ValueError as e:
+        print(f"[VIDEO SEARCH] ValueError: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+    except Exception as e:
+        print(f"[VIDEO SEARCH] Exception: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to search videos: {str(e)}"
+        )
 class ContentGenerateRequest(BaseModel):
     topic: str
     auto_approve: bool = False
