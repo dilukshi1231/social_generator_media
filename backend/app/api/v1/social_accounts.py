@@ -324,6 +324,101 @@ async def verify_account_connection(
                     "message": "Connection is active and valid",
                 }
 
+        elif account.platform == PlatformType.TIKTOK:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                # Test the token by fetching user info
+                response = await client.get(
+                    "https://open.tiktokapis.com/v2/user/info/",
+                    params={"fields": "open_id,display_name"},
+                    headers={"Authorization": f"Bearer {account.access_token}"},
+                )
+                response.raise_for_status()
+                user_data = response.json()
+
+                return {
+                    "valid": True,
+                    "platform": account.platform,
+                    "user_id": user_data.get("data", {}).get("user", {}).get("open_id"),
+                    "display_name": user_data.get("data", {})
+                    .get("user", {})
+                    .get("display_name"),
+                    "message": "Connection is active and valid",
+                }
+
+        elif account.platform == PlatformType.INSTAGRAM:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                # Get the Instagram Business Account ID and page token from platform_data
+                ig_account_id = account.platform_data.get(
+                    "instagram_business_account_id"
+                )
+                page_token = (
+                    account.platform_data.get("facebook_page_token")
+                    or account.access_token
+                )
+
+                if not ig_account_id:
+                    return {
+                        "valid": False,
+                        "platform": account.platform,
+                        "message": "Missing Instagram Business Account ID",
+                    }
+
+                # Test the token by fetching Instagram account info
+                response = await client.get(
+                    f"https://graph.facebook.com/v18.0/{ig_account_id}",
+                    params={
+                        "fields": "id,username,name",
+                        "access_token": page_token,
+                    },
+                )
+                response.raise_for_status()
+                user_data = response.json()
+
+                return {
+                    "valid": True,
+                    "platform": account.platform,
+                    "user_id": user_data.get("id"),
+                    "username": user_data.get("username"),
+                    "display_name": user_data.get("name"),
+                    "message": "Connection is active and valid",
+                }
+
+        elif account.platform == PlatformType.FACEBOOK:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                # Get the Facebook Page ID and page token from platform_data
+                page_id = (
+                    account.platform_data.get("page_id") or account.platform_user_id
+                )
+                page_token = (
+                    account.platform_data.get("page_token") or account.access_token
+                )
+
+                if not page_id:
+                    return {
+                        "valid": False,
+                        "platform": account.platform,
+                        "message": "Missing Facebook Page ID",
+                    }
+
+                # Test the token by fetching page info
+                response = await client.get(
+                    f"https://graph.facebook.com/v18.0/{page_id}",
+                    params={
+                        "fields": "id,name,category",
+                        "access_token": page_token,
+                    },
+                )
+                response.raise_for_status()
+                page_data = response.json()
+
+                return {
+                    "valid": True,
+                    "platform": account.platform,
+                    "page_id": page_data.get("id"),
+                    "page_name": page_data.get("name"),
+                    "message": "Connection is active and valid",
+                }
+
         # Add verification for other platforms as needed
         else:
             return {

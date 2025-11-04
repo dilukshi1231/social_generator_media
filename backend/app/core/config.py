@@ -65,6 +65,9 @@ class Settings(BaseSettings):
     INSTAGRAM_APP_SECRET: str = ""
     LINKEDIN_CLIENT_ID: str = ""
     LINKEDIN_CLIENT_SECRET: str = ""
+    TIKTOK_CLIENT_KEY: str = ""
+    TIKTOK_CLIENT_SECRET: str = ""
+    TIKTOK_REDIRECT_URI: str = ""
 
     # Celery
     CELERY_BROKER_URL: str

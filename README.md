@@ -128,23 +128,87 @@ pytest tests/test_auth.py
 ```env
 # Database
 DATABASE_URL=postgresql+asyncpg://user:pass@localhost:5432/dbname
+DATABASE_URL_SYNC=postgresql://user:pass@localhost:5432/dbname
+
+# Redis
+REDIS_URL=redis://localhost:6379/0
 
 # Security
-SECRET_KEY=your-secret-key-here
+SECRET_KEY=your-secret-key-here-min-32-chars
+ALGORITHM=HS256
+
+# URLs
+BACKEND_URL=http://localhost:8000
+FRONTEND_URL=http://localhost:3000
 
 # AI Services
 OPENAI_API_KEY=your-openai-key
 ANTHROPIC_API_KEY=your-anthropic-key
+GEMINI_API_KEY=your-gemini-api-key
 
-# Social Media APIs
-INSTAGRAM_USERNAME=your-username
-INSTAGRAM_PASSWORD=your-password
+# Facebook/Instagram OAuth
+FACEBOOK_APP_ID=your-facebook-app-id
+FACEBOOK_APP_SECRET=your-facebook-app-secret
+INSTAGRAM_APP_ID=your-facebook-app-id
+INSTAGRAM_APP_SECRET=your-facebook-app-secret
+INSTAGRAM_REDIRECT_URI=http://localhost:8000/api/v1/oauth/instagram/callback
+
+# LinkedIn OAuth
+LINKEDIN_CLIENT_ID=your-linkedin-client-id
+LINKEDIN_CLIENT_SECRET=your-linkedin-client-secret
+
+# Twitter OAuth
+TWITTER_CLIENT_ID=your-twitter-client-id
+TWITTER_CLIENT_SECRET=your-twitter-client-secret
+
+# TikTok OAuth
+TIKTOK_CLIENT_KEY=your-tiktok-client-key
+TIKTOK_CLIENT_SECRET=your-tiktok-client-secret
+
+# Celery
+CELERY_BROKER_URL=redis://localhost:6379/0
+CELERY_RESULT_BACKEND=redis://localhost:6379/0
 ```
+
+See `backend/.env.example` for a complete template.
 
 ### Frontend (.env.local)
 ```env
 NEXT_PUBLIC_API_URL=http://localhost:8000
 ```
+
+See `frontend/.env.example` for a complete template.
+
+## 🔐 OAuth Setup
+
+This application uses OAuth 2.0 for secure social media account connections. Each platform requires specific configuration:
+
+### Instagram OAuth Setup
+Instagram uses Facebook's OAuth system. Follow the detailed guide:
+- **Quick Start**: See `INSTAGRAM_OAUTH_CHECKLIST.md`
+- **Full Guide**: See `INSTAGRAM_OAUTH_SETUP.md`
+- **Summary of Changes**: See `OAUTH_FIXES_SUMMARY.md`
+
+**Quick Steps:**
+1. Create a Facebook App at https://developers.facebook.com/
+2. Add Instagram product to your app
+3. Configure OAuth redirect URIs
+4. Link your Instagram Business account to a Facebook Page
+5. Set environment variables (see above)
+6. Test the connection flow
+
+### Other Platforms
+- **LinkedIn**: Create app at https://www.linkedin.com/developers/
+- **Twitter**: Create app at https://developer.twitter.com/
+- **TikTok**: Create app at https://developers.tiktok.com/
+- **Facebook**: Use same app as Instagram
+
+Each platform requires:
+1. Creating a developer account
+2. Registering your application
+3. Configuring OAuth redirect URIs
+4. Setting up required permissions/scopes
+5. Adding credentials to `.env` file
 
 ## 📁 Project Structure
 
@@ -171,13 +235,41 @@ social_generator_media/
 
 ## 🚦 API Endpoints
 
+### Authentication
 - **POST** `/api/v1/auth/register` - Register new user
 - **POST** `/api/v1/auth/login` - Login user
-- **POST** `/api/v1/content/generate` - Generate content
-- **GET** `/api/v1/content` - List content
+- **GET** `/api/v1/auth/me` - Get current user
+- **POST** `/api/v1/auth/refresh` - Refresh access token
+
+### Content Management
+- **POST** `/api/v1/content/generate` - Generate AI content
+- **POST** `/api/v1/content/create` - Create custom content
+- **GET** `/api/v1/content` - List content (with filters)
+- **GET** `/api/v1/content/{id}` - Get specific content
 - **POST** `/api/v1/content/{id}/approve` - Approve content
-- **GET** `/api/v1/posts` - List posts
+- **POST** `/api/v1/content/{id}/regenerate-captions` - Regenerate captions
+- **POST** `/api/v1/content/{id}/regenerate-image` - Regenerate image
+- **DELETE** `/api/v1/content/{id}` - Delete content
+
+### Social Accounts
 - **GET** `/api/v1/social-accounts` - List connected accounts
+- **GET** `/api/v1/social-accounts/{id}` - Get specific account
+- **POST** `/api/v1/social-accounts/{id}/verify` - Verify account connection
+- **DELETE** `/api/v1/social-accounts/{id}` - Disconnect account
+- **GET** `/api/v1/social-accounts/platforms/available` - List available platforms
+
+### OAuth
+- **GET** `/api/v1/oauth/{platform}/authorize` - Get OAuth URL
+- **GET** `/api/v1/oauth/{platform}/callback` - OAuth callback handler
+  - Platforms: `instagram`, `facebook`, `linkedin`, `twitter`, `tiktok`
+
+### Posts
+- **POST** `/api/v1/posts` - Create and schedule post
+- **GET** `/api/v1/posts` - List posts (with filters)
+- **GET** `/api/v1/posts/{id}` - Get specific post
+- **POST** `/api/v1/posts/{id}/retry` - Retry failed post
+- **GET** `/api/v1/posts/{id}/stats` - Get post statistics
+- **DELETE** `/api/v1/posts/{id}` - Delete post
 
 Full API documentation available at: `http://localhost:8000/api/docs`
 

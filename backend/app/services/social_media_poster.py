@@ -366,6 +366,108 @@ class SocialMediaPosterService:
 
             return publish_response.json()
 
+    async def post_to_tiktok(
+        self,
+        access_token: str,
+        open_id: str,
+        caption: str,
+        video_url: Optional[str] = None,
+    ) -> Dict:
+        """
+        Post content to TikTok.
+
+        NOTE: TikTok only supports video uploads, not images or text-only posts.
+        This requires the video to be publicly accessible via URL.
+
+        Args:
+            access_token: TikTok access token
+            open_id: TikTok open_id (user identifier)
+            caption: Video caption/description
+            video_url: Publicly accessible video URL (required)
+
+        Returns:
+            Response from TikTok API
+        """
+        try:
+            print(f"[TikTok Post] Starting TikTok post, caption length: {len(caption)}")
+
+            if not video_url:
+                print("[TikTok Post] ERROR: Video URL is required for TikTok")
+                return {
+                    "success": False,
+                    "error": "TikTok requires a video URL. Text-only and image posts are not supported.",
+                    "platform": "tiktok",
+                }
+
+            # TikTok Content Posting API v2
+            # https://developers.tiktok.com/doc/content-posting-api-get-started/
+            async with httpx.AsyncClient(timeout=60.0) as client:
+                post_url = "https://open.tiktokapis.com/v2/post/publish/video/init/"
+
+                headers = {
+                    "Authorization": f"Bearer {access_token}",
+                    "Content-Type": "application/json",
+                }
+
+                post_data = {
+                    "post_info": {
+                        "title": caption[:150],  # TikTok title max 150 chars
+                        "privacy_level": "SELF_ONLY",  # Options: PUBLIC_TO_EVERYONE, MUTUAL_FOLLOW_FRIENDS, SELF_ONLY
+                        "disable_duet": False,
+                        "disable_comment": False,
+                        "disable_stitch": False,
+                        "video_cover_timestamp_ms": 1000,
+                    },
+                    "source_info": {
+                        "source": "FILE_URL",
+                        "video_url": video_url,
+                    },
+                }
+
+                print(f"[TikTok Post] Initiating video upload...")
+                response = await client.post(post_url, headers=headers, json=post_data)
+
+                print(f"[TikTok Post] Response status: {response.status_code}")
+
+                if response.status_code != 200:
+                    error_text = response.text
+                    print(f"[TikTok Post] Error: {error_text}")
+
+                    try:
+                        error_json = response.json()
+                        error_detail = (
+                            error_json.get("error", {}).get("message") or error_text
+                        )
+                    except:
+                        error_detail = error_text
+
+                    return {
+                        "success": False,
+                        "error": f"TikTok post failed: {error_detail}",
+                        "platform": "tiktok",
+                    }
+
+                response.raise_for_status()
+                result = response.json()
+
+                # TikTok returns publish_id for tracking the upload
+                publish_id = result.get("data", {}).get("publish_id")
+
+                print(f"[TikTok Post] Video upload initiated, publish_id: {publish_id}")
+
+                return {
+                    "success": True,
+                    "post_id": publish_id,
+                    "platform": "tiktok",
+                }
+
+        except Exception as e:
+            print(f"[TikTok Post] Exception occurred: {str(e)}")
+            import traceback
+
+            print(f"[TikTok Post] Traceback: {traceback.format_exc()}")
+            return {"success": False, "error": str(e), "platform": "tiktok"}
+
     async def post_to_multiple_platforms(
         self,
         platforms: List[str],
@@ -478,6 +580,21 @@ class SocialMediaPosterService:
                         text=captions.get("threads", ""),
                     )
                     results["threads"] = {"success": True, "data": result}
+
+                elif platform == "tiktok" and "tiktok" in credentials:
+                    # TikTok requires a video URL (not image or text-only)
+                    result = await self.post_to_tiktok(
+                        access_token=credentials["tiktok"]["access_token"],
+                        open_id=credentials["tiktok"]["open_id"],
+                        caption=captions.get("tiktok", ""),
+                        video_url=(
+                            image_url
+                            if image_url
+                            and image_url.endswith((".mp4", ".mov", ".avi"))
+                            else None
+                        ),
+                    )
+                    results["tiktok"] = result
 
             except Exception as e:
                 results[platform] = {"success": False, "error": str(e)}
