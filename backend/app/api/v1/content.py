@@ -33,6 +33,7 @@ class ContentResponse(BaseModel):
     twitter_caption: Optional[str]
     threads_caption: Optional[str]
     image_prompt: Optional[str]
+    image_caption: Optional[str]
     image_url: Optional[str]
     extra_data: Optional[dict]
     status: ContentStatus
@@ -47,9 +48,7 @@ class ContentApprovalRequest(BaseModel):
     feedback: Optional[str] = None
 
 
-@router.post(
-    "/generate", response_model=ContentResponse, status_code=status.HTTP_201_CREATED
-)
+@router.post("/generate", response_model=ContentResponse, status_code=status.HTTP_201_CREATED)
 async def generate_content(
     request: ContentGenerateRequest,
     background_tasks: BackgroundTasks,
@@ -85,11 +84,7 @@ async def generate_content(
             image_prompt=content_data.get("image_prompt"),
             image_data=content_data.get("image_base64"),
             image_url=content_data.get("image_data"),
-            status=(
-                ContentStatus.APPROVED
-                if request.auto_approve
-                else ContentStatus.PENDING_APPROVAL
-            ),
+            status=(ContentStatus.APPROVED if request.auto_approve else ContentStatus.PENDING_APPROVAL),
             approved_at=datetime.utcnow() if request.auto_approve else None,
             extra_data={  # Changed from metadata to extra_data
                 "image_mime": content_data.get("image_mime"),
@@ -118,13 +113,12 @@ class ContentCreateRequest(BaseModel):
     twitter_caption: Optional[str] = None
     threads_caption: Optional[str] = None
     image_prompt: Optional[str] = None
+    image_caption: Optional[str] = None
     image_url: Optional[str] = None
     auto_approve: bool = False
 
 
-@router.post(
-    "/create", response_model=ContentResponse, status_code=status.HTTP_201_CREATED
-)
+@router.post("/create", response_model=ContentResponse, status_code=status.HTTP_201_CREATED)
 async def create_content(
     request: ContentCreateRequest,
     current_user: User = Depends(get_current_user),
@@ -146,12 +140,9 @@ async def create_content(
             twitter_caption=request.twitter_caption,
             threads_caption=request.threads_caption,
             image_prompt=request.image_prompt,
+            image_caption=request.image_caption,
             image_url=request.image_url,
-            status=(
-                ContentStatus.APPROVED
-                if request.auto_approve
-                else ContentStatus.PENDING_APPROVAL
-            ),
+            status=(ContentStatus.APPROVED if request.auto_approve else ContentStatus.PENDING_APPROVAL),
             approved_at=datetime.utcnow() if request.auto_approve else None,
             extra_data={
                 "source": "webhook",
@@ -201,17 +192,11 @@ async def get_content(
     db: AsyncSession = Depends(get_db),
 ):
     """Get specific content by ID."""
-    result = await db.execute(
-        select(Content).where(
-            Content.id == content_id, Content.user_id == current_user.id
-        )
-    )
+    result = await db.execute(select(Content).where(Content.id == content_id, Content.user_id == current_user.id))
     content = result.scalar_one_or_none()
 
     if not content:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Content not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Content not found")
 
     return content
 
@@ -224,17 +209,11 @@ async def approve_content(
     db: AsyncSession = Depends(get_db),
 ):
     """Approve or reject generated content."""
-    result = await db.execute(
-        select(Content).where(
-            Content.id == content_id, Content.user_id == current_user.id
-        )
-    )
+    result = await db.execute(select(Content).where(Content.id == content_id, Content.user_id == current_user.id))
     content = result.scalar_one_or_none()
 
     if not content:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Content not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Content not found")
 
     if approval.approved:
         # Mark as approved only; posting will be handled explicitly via /posts
@@ -251,9 +230,7 @@ async def approve_content(
             extra["rejection_feedback"] = approval.feedback
 
             # Use an explicit UPDATE statement to ensure JSON is persisted
-            await db.execute(
-                update(Content).where(Content.id == content_id).values(extra_data=extra)
-            )
+            await db.execute(update(Content).where(Content.id == content_id).values(extra_data=extra))
 
     await db.commit()
     await db.refresh(content)
@@ -268,17 +245,11 @@ async def delete_content(
     db: AsyncSession = Depends(get_db),
 ):
     """Delete content."""
-    result = await db.execute(
-        select(Content).where(
-            Content.id == content_id, Content.user_id == current_user.id
-        )
-    )
+    result = await db.execute(select(Content).where(Content.id == content_id, Content.user_id == current_user.id))
     content = result.scalar_one_or_none()
 
     if not content:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Content not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Content not found")
 
     await db.delete(content)
     await db.commit()
@@ -293,17 +264,11 @@ async def regenerate_image(
     db: AsyncSession = Depends(get_db),
 ):
     """Regenerate image for existing content."""
-    result = await db.execute(
-        select(Content).where(
-            Content.id == content_id, Content.user_id == current_user.id
-        )
-    )
+    result = await db.execute(select(Content).where(Content.id == content_id, Content.user_id == current_user.id))
     content = result.scalar_one_or_none()
 
     if not content:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Content not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Content not found")
 
     # Initialize generator
     generator = ContentGeneratorService()
@@ -313,9 +278,7 @@ async def regenerate_image(
         image_data = await generator.generate_image_from_prompt(content.image_prompt)
 
         # Update content
-        content.image_data = (
-            image_data.split(",")[1] if image_data and "," in image_data else None
-        )
+        content.image_data = image_data.split(",")[1] if image_data and "," in image_data else None
         content.image_url = image_data
         content.status = ContentStatus.PENDING_APPROVAL
 
@@ -349,17 +312,11 @@ async def regenerate_captions(
     db: AsyncSession = Depends(get_db),
 ):
     """Regenerate captions for existing content."""
-    result = await db.execute(
-        select(Content).where(
-            Content.id == content_id, Content.user_id == current_user.id
-        )
-    )
+    result = await db.execute(select(Content).where(Content.id == content_id, Content.user_id == current_user.id))
     content = result.scalar_one_or_none()
 
     if not content:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Content not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Content not found")
 
     # Initialize generator
     generator = ContentGeneratorService()
@@ -429,9 +386,7 @@ async def generate_image_proxy(
         "CLOUDEFARE_WORKER_URL",
         "https://rapid-cherry-82e1.tharindukasthurisinghe.workers.dev",
     )
-    auth_token = os.getenv(
-        "CLOUDEFARE_WORKER_AUTH_TOKEN", "8704cf55-470b-40fb-8ad8-a5afa16f2a51"
-    )
+    auth_token = os.getenv("CLOUDEFARE_WORKER_AUTH_TOKEN", "8704cf55-470b-40fb-8ad8-a5afa16f2a51")
 
     try:
         async with httpx.AsyncClient(timeout=60.0) as client:
@@ -479,4 +434,87 @@ async def generate_image_proxy(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to generate image: {str(e)}",
+        )
+
+
+class EmbedCaptionRequest(BaseModel):
+    image_url: str
+    caption: str
+    position: str = "bottom"  # top, bottom, or center
+    font_size: int = 40
+
+
+class EmbedCaptionResponse(BaseModel):
+    image_url: str
+    file_path: str
+    success: bool
+
+
+@router.post("/embed-caption", response_model=EmbedCaptionResponse)
+async def embed_caption_on_image(
+    request: EmbedCaptionRequest,
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Embed a caption on an existing image.
+
+    Takes an image URL (must be a local file), adds the caption text overlay,
+    and returns the path to the modified image.
+    """
+    from pathlib import Path
+    from app.utils.image_utils import embed_caption_on_image as embed_caption
+
+    try:
+        # Extract the file path from the URL
+        # Expected format: /uploads/images/filename.jpg
+        if not request.image_url.startswith("/uploads/images/"):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid image URL. Must be a local upload.",
+            )
+
+        # Convert URL to file path
+        relative_path = request.image_url.lstrip("/")
+        file_path = Path(relative_path)
+
+        if not file_path.exists():
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Image file not found: {request.image_url}",
+            )
+
+        # Validate position
+        valid_positions = ["top", "bottom", "center"]
+        position = request.position.lower()
+        if position not in valid_positions:
+            position = "bottom"
+
+        # Embed the caption on the image
+        result_path = embed_caption(
+            image_path=str(file_path),
+            caption=request.caption,
+            position=position,
+            font_size=request.font_size,
+        )
+
+        # Return the same URL (image is modified in place)
+        return EmbedCaptionResponse(
+            image_url=request.image_url,
+            file_path=relative_path,
+            success=True,
+        )
+
+    except FileNotFoundError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Image not found: {str(e)}",
+        )
+    except Exception as e:
+        import traceback
+
+        print(f"Error embedding caption: {str(e)}")
+        print(traceback.format_exc())
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to embed caption: {str(e)}",
         )
