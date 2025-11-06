@@ -3,6 +3,7 @@ Image utility functions for processing and manipulating images.
 """
 
 from PIL import Image, ImageDraw, ImageFont
+from pilmoji import Pilmoji
 from pathlib import Path
 import textwrap
 from typing import Tuple, Optional
@@ -335,46 +336,40 @@ def add_caption_to_image(
     # Draw background rectangle
     draw.rectangle([(0, bg_y), (bg_width, bg_y + bg_height)], fill=bg_color)
 
-    # Draw each line of text with hybrid font support (text + emojis)
+    # Draw each line of text with color emoji support using Pilmoji
     current_y = text_y
-    for line, line_height in zip(wrapped_lines, line_heights):
-        # Split line into text and emoji segments
-        segments = split_text_and_emoji(line)
 
-        # Calculate total line width for centering
-        total_width = 0
-        segment_widths = []
-        for segment_text, is_emoji in segments:
+    # Create Pilmoji instance for color emoji rendering
+    with Pilmoji(overlay) as pilmoji:
+        for line, line_height in zip(wrapped_lines, line_heights):
+            # Calculate text width for centering using primary font
             try:
-                segment_font = emoji_font if is_emoji else primary_font
-                bbox = draw.textbbox((0, 0), segment_text, font=segment_font)
-                width = bbox[2] - bbox[0]
-                segment_widths.append(width)
-                total_width += width
+                bbox = draw.textbbox((0, 0), line, font=primary_font)
+                text_width = bbox[2] - bbox[0]
             except Exception:
-                width = len(segment_text) * avg_char_width
-                segment_widths.append(width)
-                total_width += width
+                text_width = len(line) * avg_char_width
 
-        # Start position for centered text
-        text_x = (img_width - total_width) // 2
+            # Start position for centered text
+            text_x = (img_width - text_width) // 2
 
-        # Draw each segment with appropriate font
-        for (segment_text, is_emoji), segment_width in zip(segments, segment_widths):
-            segment_font = emoji_font if is_emoji else primary_font
+            # Draw text with color emojis using Pilmoji
             try:
-                draw.text((text_x, current_y), segment_text, font=segment_font, fill=text_color)
+                pilmoji.text(
+                    (text_x, current_y),
+                    line,
+                    font=primary_font,
+                    fill=text_color,
+                    emoji_scale_factor=1.0,  # Keep emojis same size as text
+                )
             except Exception as e:
-                # If drawing fails, try with primary font
-                print(f"Failed to draw segment '{segment_text}': {e}")
+                # Fallback to regular drawing if Pilmoji fails
+                print(f"Pilmoji failed, using fallback: {e}")
                 try:
-                    draw.text((text_x, current_y), segment_text, font=primary_font, fill=text_color)
+                    draw.text((text_x, current_y), line, font=primary_font, fill=text_color)
                 except:
-                    pass  # Skip if both fail
+                    pass
 
-            text_x += segment_width
-
-        current_y += line_height + line_spacing
+            current_y += line_height + line_spacing
 
     # Composite the overlay onto the original image
     img = Image.alpha_composite(img, overlay)

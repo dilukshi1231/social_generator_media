@@ -64,6 +64,8 @@ pandas==2.3.0
 parso==0.8.4
 passlib==1.7.4
 pillow==11.2.1
+pilmoji==2.0.3
+emoji==1.7.0
 platformdirs==4.3.7
 prompt_toolkit==3.0.51
 proto-plus==1.26.1
