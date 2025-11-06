@@ -152,6 +152,13 @@ export const contentAPI = {
     caption: string;
     position?: string;
     font_size?: number;
+    text_color?: string;
+    text_opacity?: number;
+    bg_color?: string;
+    bg_opacity?: number;
+    padding?: number;
+    max_width_ratio?: number;
+    font_family?: string;
   }) => api.post('/api/v1/content/embed-caption', data),
 };
 

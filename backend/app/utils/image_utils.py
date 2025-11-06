@@ -270,6 +270,11 @@ def embed_caption_on_image(
     caption: str,
     position: str = "bottom",
     font_size: int = 40,
+    text_color: Tuple[int, int, int, int] = (255, 255, 255, 255),
+    bg_color: Tuple[int, int, int, int] = (0, 0, 0, 180),
+    padding: int = 20,
+    max_width_ratio: float = 0.9,
+    font_family: str = "default",
 ) -> str:
     """
     Convenience wrapper for adding caption to image.
@@ -279,6 +284,11 @@ def embed_caption_on_image(
         caption: Caption text to embed
         position: Position of caption ("top", "bottom", "center")
         font_size: Font size for the caption
+        text_color: RGBA color tuple for text
+        bg_color: RGBA color tuple for background
+        padding: Padding around text
+        max_width_ratio: Maximum width of text as ratio of image width
+        font_family: Font family preference
 
     Returns:
         Path to the output image (same as input, modified in place)
@@ -294,6 +304,10 @@ def embed_caption_on_image(
         output_path=path,  # Overwrite the original
         font_size=font_size,
         position=position,
+        text_color=text_color,
+        bg_color=bg_color,
+        padding=padding,
+        max_width_ratio=max_width_ratio,
     )
 
     return str(result_path)

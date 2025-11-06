@@ -9,6 +9,7 @@ import { Label } from '@/components/ui/label';
 import { useToast } from '@/components/ui/use-toast';
 import { Loader2, Sparkles, ArrowLeft } from 'lucide-react';
 import ContentPreview from '@/components/content/content-preview';
+import CaptionCustomizer, { CaptionSettings, defaultCaptionSettings } from '@/components/content/caption-customizer';
 import type { Content } from '@/types';
 
 export default function CreateContentPage() {
@@ -18,6 +19,7 @@ export default function CreateContentPage() {
   const [topic, setTopic] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatedContent, setGeneratedContent] = useState<Content | null>(null);
+  const [captionSettings, setCaptionSettings] = useState<CaptionSettings>(defaultCaptionSettings);
 
   useEffect(() => {
     console.log('🚀 CreateContentPage component mounted');
@@ -67,16 +69,23 @@ export default function CreateContentPage() {
       console.log('[Image] Image saved to:', data.file_path);
       console.log('[Image] Image URL:', imageUrl);
 
-      // Embed caption if provided
-      if (caption) {
+      // Embed caption if provided and enabled
+      if (caption && captionSettings.enabled) {
         try {
-          console.log('[Caption] Embedding caption on image...');
+          console.log('[Caption] Embedding caption on image with settings...');
           const { contentAPI } = await import('@/lib/api');
           await contentAPI.embedCaption({
             image_url: data.image_url,
             caption: caption,
-            position: 'bottom',
-            font_size: 40,
+            position: captionSettings.position,
+            font_size: captionSettings.fontSize,
+            text_color: captionSettings.textColor,
+            text_opacity: captionSettings.textOpacity,
+            bg_color: captionSettings.bgColor,
+            bg_opacity: captionSettings.bgOpacity,
+            padding: captionSettings.padding,
+            max_width_ratio: captionSettings.maxWidthRatio,
+            font_family: captionSettings.fontFamily,
           });
           console.log('[Caption] Caption embedded successfully');
         } catch (embedError) {
@@ -458,6 +467,13 @@ export default function CreateContentPage() {
                 <span>Be specific for better results. The AI will generate optimized captions for all platforms.</span>
               </p>
             </div>
+
+            {/* Caption Customizer */}
+            <CaptionCustomizer
+              settings={captionSettings}
+              onChange={setCaptionSettings}
+              previewCaption="Unleashing emotions, one dance at a time. ✨"
+            />
 
             <div className="flex gap-3">
               <Button

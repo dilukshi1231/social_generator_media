@@ -442,6 +442,17 @@ class EmbedCaptionRequest(BaseModel):
     caption: str
     position: str = "bottom"  # top, bottom, or center
     font_size: int = 40
+    # Text styling
+    text_color: str = "#FFFFFF"  # Hex color for text
+    text_opacity: int = 255  # 0-255
+    # Background styling
+    bg_color: str = "#000000"  # Hex color for background
+    bg_opacity: int = 180  # 0-255
+    # Layout
+    padding: int = 20
+    max_width_ratio: float = 0.9  # Ratio of image width for text
+    # Font options
+    font_family: str = "default"  # default, arial, segoe, etc.
 
 
 class EmbedCaptionResponse(BaseModel):
@@ -489,12 +500,29 @@ async def embed_caption_on_image(
         if position not in valid_positions:
             position = "bottom"
 
-        # Embed the caption on the image
+        # Convert hex colors to RGBA tuples
+        def hex_to_rgba(hex_color: str, opacity: int) -> tuple:
+            """Convert hex color and opacity to RGBA tuple."""
+            hex_color = hex_color.lstrip("#")
+            if len(hex_color) == 6:
+                r, g, b = tuple(int(hex_color[i : i + 2], 16) for i in (0, 2, 4))
+                return (r, g, b, opacity)
+            return (255, 255, 255, opacity)  # Default to white
+
+        text_color = hex_to_rgba(request.text_color, request.text_opacity)
+        bg_color = hex_to_rgba(request.bg_color, request.bg_opacity)
+
+        # Embed the caption on the image with all custom options
         result_path = embed_caption(
             image_path=str(file_path),
             caption=request.caption,
             position=position,
             font_size=request.font_size,
+            text_color=text_color,
+            bg_color=bg_color,
+            padding=request.padding,
+            max_width_ratio=request.max_width_ratio,
+            font_family=request.font_family,
         )
 
         # Return the same URL (image is modified in place)

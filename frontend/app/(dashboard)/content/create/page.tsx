@@ -11,6 +11,7 @@ import { contentAPI } from '@/lib/api';
 import { useToast } from '@/components/ui/use-toast';
 import { Loader2, Sparkles, ArrowLeft } from 'lucide-react';
 import ContentPreview from '@/components/content/content-preview';
+import CaptionCustomizer, { CaptionSettings, defaultCaptionSettings } from '@/components/content/caption-customizer';
 import type { Content } from '@/types';
 
 export default function CreateContentPage() {
@@ -23,6 +24,7 @@ export default function CreateContentPage() {
   const [webhookRaw, setWebhookRaw] = useState<Record<string, unknown> | null>(null);
   const [isWebhookLoading, setIsWebhookLoading] = useState(false);
   const [isRegenerating, setIsRegenerating] = useState(false);
+  const [captionSettings, setCaptionSettings] = useState<CaptionSettings>(defaultCaptionSettings);
 
   const handleGenerate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -116,15 +118,22 @@ export default function CreateContentPage() {
             imageUrl = `${apiUrl}${imgData.image_url}`;
             console.log('[Image] Image generated:', imageUrl);
 
-            // Embed caption on the image if we have one
-            if (imageCaption) {
+            // Embed caption on the image if we have one and caption embedding is enabled
+            if (imageCaption && captionSettings.enabled) {
               try {
-                console.log('[Caption] Embedding caption on image...');
+                console.log('[Caption] Embedding caption on image with settings:', captionSettings);
                 await contentAPI.embedCaption({
                   image_url: imgData.image_url,
                   caption: imageCaption,
-                  position: 'bottom',
-                  font_size: 40,
+                  position: captionSettings.position,
+                  font_size: captionSettings.fontSize,
+                  text_color: captionSettings.textColor,
+                  text_opacity: captionSettings.textOpacity,
+                  bg_color: captionSettings.bgColor,
+                  bg_opacity: captionSettings.bgOpacity,
+                  padding: captionSettings.padding,
+                  max_width_ratio: captionSettings.maxWidthRatio,
+                  font_family: captionSettings.fontFamily,
                 });
                 console.log('[Caption] Caption embedded successfully');
               } catch (embedError) {
@@ -343,15 +352,22 @@ export default function CreateContentPage() {
             imageUrl = `${apiUrl}${imgData.image_url}`;
             console.log('[Regenerate] New image generated:', imageUrl);
 
-            // Embed caption on the image if we have one
-            if (imageCaption) {
+            // Embed caption on the image if we have one and caption embedding is enabled
+            if (imageCaption && captionSettings.enabled) {
               try {
-                console.log('[Caption] Embedding caption on regenerated image...');
+                console.log('[Caption] Embedding caption on regenerated image with settings...');
                 await contentAPI.embedCaption({
                   image_url: imgData.image_url,
                   caption: imageCaption,
-                  position: 'bottom',
-                  font_size: 40,
+                  position: captionSettings.position,
+                  font_size: captionSettings.fontSize,
+                  text_color: captionSettings.textColor,
+                  text_opacity: captionSettings.textOpacity,
+                  bg_color: captionSettings.bgColor,
+                  bg_opacity: captionSettings.bgOpacity,
+                  padding: captionSettings.padding,
+                  max_width_ratio: captionSettings.maxWidthRatio,
+                  font_family: captionSettings.fontFamily,
                 });
                 console.log('[Caption] Caption embedded successfully');
               } catch (embedError) {
@@ -493,6 +509,13 @@ export default function CreateContentPage() {
                   </p>
                 </div>
               </div>
+
+              {/* Caption Customizer */}
+              <CaptionCustomizer
+                settings={captionSettings}
+                onChange={setCaptionSettings}
+                previewCaption="Unleashing emotions, one dance at a time. ✨"
+              />
 
               <Button
                 type="submit"
