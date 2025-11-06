@@ -23,7 +23,7 @@ export default function CreateContentPage() {
     console.log('🚀 CreateContentPage component mounted');
   }, []);
 
-  const generateImage = async (prompt: string): Promise<string> => {
+  const generateImage = async (prompt: string, caption?: string): Promise<string> => {
     console.log('[Image] Generating image with prompt:', prompt);
 
     const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
@@ -66,6 +66,24 @@ export default function CreateContentPage() {
 
       console.log('[Image] Image saved to:', data.file_path);
       console.log('[Image] Image URL:', imageUrl);
+
+      // Embed caption if provided
+      if (caption) {
+        try {
+          console.log('[Caption] Embedding caption on image...');
+          const { contentAPI } = await import('@/lib/api');
+          await contentAPI.embedCaption({
+            image_url: data.image_url,
+            caption: caption,
+            position: 'bottom',
+            font_size: 40,
+          });
+          console.log('[Caption] Caption embedded successfully');
+        } catch (embedError) {
+          console.error('[Caption] Failed to embed caption:', embedError);
+          // Continue without caption embed - not critical
+        }
+      }
 
       return imageUrl;
     } catch (error) {
@@ -120,6 +138,7 @@ export default function CreateContentPage() {
 
       // Extract data from the new nested structure
       const imagePrompt = data.image_generation_prompt || '';
+      const imageCaption = data.image_caption || '';
       const captions = data.social_media_captions || {};
 
       // Map captions to our expected format
@@ -141,7 +160,7 @@ export default function CreateContentPage() {
       if (imagePrompt) {
         console.log('[Image] Starting image generation...');
         try {
-          imageUrl = await generateImage(imagePrompt);
+          imageUrl = await generateImage(imagePrompt, imageCaption);
           console.log('[Image] Image URL created:', imageUrl);
         } catch (imageError) {
           console.error('[Image] Image generation failed, continuing without image:', imageError);
@@ -160,6 +179,7 @@ export default function CreateContentPage() {
         threads_caption: tiktokCaption,
         pinterest_caption: '', // Not in new format
         image_prompt: imagePrompt,
+        image_caption: imageCaption,
         image_url: imageUrl,
         status: 'pending_approval',
         created_at: new Date().toISOString(),
@@ -219,6 +239,7 @@ export default function CreateContentPage() {
         twitter_caption: generatedContent.twitter_caption,
         threads_caption: generatedContent.threads_caption,
         image_prompt: generatedContent.image_prompt,
+        image_caption: generatedContent.image_caption,
         image_url: generatedContent.image_url,
         auto_approve: true,
       });

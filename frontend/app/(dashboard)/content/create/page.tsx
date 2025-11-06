@@ -71,6 +71,7 @@ export default function CreateContentPage() {
 
       // Extract data from the new nested structure
       const imagePrompt = webhookData.image_generation_prompt || '';
+      const imageCaption = webhookData.image_caption || '';
       const captions = webhookData.social_media_captions || {};
 
       // Map captions to our expected format
@@ -114,6 +115,23 @@ export default function CreateContentPage() {
             const imgData = await imgResponse.json();
             imageUrl = `${apiUrl}${imgData.image_url}`;
             console.log('[Image] Image generated:', imageUrl);
+
+            // Embed caption on the image if we have one
+            if (imageCaption) {
+              try {
+                console.log('[Caption] Embedding caption on image...');
+                await contentAPI.embedCaption({
+                  image_url: imgData.image_url,
+                  caption: imageCaption,
+                  position: 'bottom',
+                  font_size: 40,
+                });
+                console.log('[Caption] Caption embedded successfully');
+              } catch (embedError) {
+                console.error('[Caption] Failed to embed caption:', embedError);
+                // Continue without caption embed - not critical
+              }
+            }
           } else {
             console.error('[Image] Failed to generate image:', await imgResponse.text());
           }
@@ -127,6 +145,7 @@ export default function CreateContentPage() {
       const response = await contentAPI.create({
         topic: topic.trim(),
         image_prompt: imagePrompt,
+        image_caption: imageCaption,
         image_url: imageUrl,
         facebook_caption: facebookCaption,
         instagram_caption: instagramCaption,
@@ -280,6 +299,7 @@ export default function CreateContentPage() {
 
       // Extract data from the new nested structure
       const imagePrompt = webhookData.image_generation_prompt || '';
+      const imageCaption = webhookData.image_caption || '';
       const captions = webhookData.social_media_captions || {};
 
       // Map captions to our expected format
@@ -322,6 +342,23 @@ export default function CreateContentPage() {
             const imgData = await imgResponse.json();
             imageUrl = `${apiUrl}${imgData.image_url}`;
             console.log('[Regenerate] New image generated:', imageUrl);
+
+            // Embed caption on the image if we have one
+            if (imageCaption) {
+              try {
+                console.log('[Caption] Embedding caption on regenerated image...');
+                await contentAPI.embedCaption({
+                  image_url: imgData.image_url,
+                  caption: imageCaption,
+                  position: 'bottom',
+                  font_size: 40,
+                });
+                console.log('[Caption] Caption embedded successfully');
+              } catch (embedError) {
+                console.error('[Caption] Failed to embed caption:', embedError);
+                // Continue without caption embed - not critical
+              }
+            }
           } else {
             console.error('[Regenerate] Failed to generate image:', await imgResponse.text());
           }
@@ -335,6 +372,7 @@ export default function CreateContentPage() {
       const response = await contentAPI.create({
         topic: topic.trim(),
         image_prompt: imagePrompt || generatedContent.image_prompt || '',
+        image_caption: imageCaption,
         image_url: imageUrl,
         facebook_caption: facebookCaption,
         instagram_caption: instagramCaption,

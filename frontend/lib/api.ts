@@ -126,6 +126,7 @@ export const contentAPI = {
     twitter_caption?: string;
     threads_caption?: string;
     image_prompt?: string;
+    image_caption?: string;
     image_url?: string;
     auto_approve?: boolean;
   }) => api.post('/api/v1/content/create', data),
@@ -145,6 +146,13 @@ export const contentAPI = {
     api.post(`/api/v1/content/${id}/regenerate-image`),
 
   delete: (id: number) => api.delete(`/api/v1/content/${id}`),
+
+  embedCaption: (data: {
+    image_url: string;
+    caption: string;
+    position?: string;
+    font_size?: number;
+  }) => api.post('/api/v1/content/embed-caption', data),
 };
 
 // Social Accounts API
