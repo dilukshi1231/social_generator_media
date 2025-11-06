@@ -11,7 +11,11 @@ import requests
 import os
 
 
-# Google Fonts URLs - using free fonts from GitHub repositories
+import requests
+import os
+
+
+# Google Fonts URLs - using free fonts with emoji support
 GOOGLE_FONTS = {
     "roboto": "https://github.com/google/roboto/raw/main/src/hinted/Roboto-Bold.ttf",
     "open_sans": "https://github.com/googlefonts/opensans/raw/main/fonts/ttf/OpenSans-Bold.ttf",
@@ -26,6 +30,11 @@ GOOGLE_FONTS = {
     "source_sans": "https://github.com/adobe-fonts/source-sans/raw/release/TTF/SourceSans3-Bold.ttf",
     "impact": "https://github.com/theleagueof/league-gothic/raw/master/LeagueGothic-Regular.otf",
 }
+
+# Emoji font fallback
+EMOJI_FONT_URLS = [
+    "https://github.com/googlefonts/noto-emoji/raw/main/fonts/NotoColorEmoji.ttf",
+]
 
 # Cache directory for downloaded fonts
 FONT_CACHE_DIR = Path("uploads/fonts")
@@ -45,19 +54,19 @@ def download_font(font_url: str, font_name: str) -> Optional[Path]:
     """
     try:
         cache_path = FONT_CACHE_DIR / font_name
-
+        
         # If already cached, return the path
         if cache_path.exists():
             return cache_path
-
+        
         # Download the font
         response = requests.get(font_url, timeout=10)
         response.raise_for_status()
-
+        
         # Save to cache
-        with open(cache_path, "wb") as f:
+        with open(cache_path, 'wb') as f:
             f.write(response.content)
-
+        
         return cache_path
     except Exception as e:
         print(f"Failed to download font from {font_url}: {e}")
@@ -77,23 +86,23 @@ def get_font_by_family(font_family: str, font_size: int, prefer_emoji: bool = Tr
         ImageFont object
     """
     font = None
-
+    
     # Try to load the requested font family from Google Fonts
     if font_family in GOOGLE_FONTS:
         font_url = GOOGLE_FONTS[font_family]
         font_filename = f"{font_family}.ttf"
         font_path = download_font(font_url, font_filename)
-
+        
         if font_path:
             try:
                 font = ImageFont.truetype(str(font_path), font_size)
-
+                
                 # Test if the font supports emojis
                 if prefer_emoji:
                     test_emoji = "😀"
                     test_img = Image.new("RGBA", (100, 100))
                     test_draw = ImageDraw.Draw(test_img)
-
+                    
                     try:
                         test_draw.text((0, 0), test_emoji, font=font, fill=(255, 255, 255, 255))
                         # If we get here, emoji is supported
@@ -103,18 +112,132 @@ def get_font_by_family(font_family: str, font_size: int, prefer_emoji: bool = Tr
                         print(f"Font {font_family} doesn't support emojis, using fallback")
             except Exception as e:
                 print(f"Failed to load font {font_family}: {e}")
-
+    
     # Fallback to emoji-supporting font or default
     if font is None or prefer_emoji:
         return get_font_with_emoji_support(font_size)
-
+    
     return font
+
+
+def get_font_with_emoji_support(font_size: int = 40):
+    """
+    Load a font by family name with optional emoji support.
+
+    Args:
+        font_family: Font family name (roboto, arial, consolas, etc.)
+        font_size: Size of the font
+        prefer_emoji: Whether to prefer emoji-supporting variants
+
+    Returns:
+        ImageFont object
+    """
+    # Define font paths for different families
+    font_families = {
+        "roboto": [
+            "C:/Windows/Fonts/Roboto-Bold.ttf",
+            "C:/Windows/Fonts/Roboto-Regular.ttf",
+            "/usr/share/fonts/truetype/roboto/Roboto-Bold.ttf",
+            "/usr/share/fonts/truetype/roboto/Roboto-Regular.ttf",
+            "/System/Library/Fonts/Roboto-Bold.ttf",
+        ],
+        "arial": [
+            "C:/Windows/Fonts/arialbd.ttf",
+            "C:/Windows/Fonts/arial.ttf",
+            "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+            "/System/Library/Fonts/Arial Bold.ttf",
+        ],
+        "times": [
+            "C:/Windows/Fonts/timesbd.ttf",
+            "C:/Windows/Fonts/times.ttf",
+            "/usr/share/fonts/truetype/liberation/LiberationSerif-Bold.ttf",
+            "/System/Library/Fonts/Times New Roman Bold.ttf",
+        ],
+        "consolas": [
+            "C:/Windows/Fonts/consolab.ttf",
+            "C:/Windows/Fonts/consola.ttf",
+            "/usr/share/fonts/truetype/dejavu/DejaVuSansMono-Bold.ttf",
+            "/System/Library/Fonts/Courier New Bold.ttf",
+        ],
+        "courier": [
+            "C:/Windows/Fonts/courbd.ttf",
+            "C:/Windows/Fonts/cour.ttf",
+            "/usr/share/fonts/truetype/dejavu/DejaVuSansMono-Bold.ttf",
+            "/System/Library/Fonts/Courier New Bold.ttf",
+        ],
+        "georgia": [
+            "C:/Windows/Fonts/georgiab.ttf",
+            "C:/Windows/Fonts/georgia.ttf",
+            "/usr/share/fonts/truetype/liberation/LiberationSerif-Bold.ttf",
+            "/System/Library/Fonts/Georgia Bold.ttf",
+        ],
+        "verdana": [
+            "C:/Windows/Fonts/verdanab.ttf",
+            "C:/Windows/Fonts/verdana.ttf",
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+            "/System/Library/Fonts/Verdana Bold.ttf",
+        ],
+        "tahoma": [
+            "C:/Windows/Fonts/tahomabd.ttf",
+            "C:/Windows/Fonts/tahoma.ttf",
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+        ],
+        "segoe": [
+            "C:/Windows/Fonts/segoeuib.ttf",
+            "C:/Windows/Fonts/segoeui.ttf",
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+        ],
+        "comic_sans": [
+            "C:/Windows/Fonts/comicbd.ttf",
+            "C:/Windows/Fonts/comic.ttf",
+            "/usr/share/fonts/truetype/humor-sans/Humor-Sans.ttf",
+        ],
+        "impact": [
+            "C:/Windows/Fonts/impact.ttf",
+            "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+        ],
+    }
+
+    # Normalize font family name
+    font_family = font_family.lower().replace(" ", "_").replace("-", "_")
+
+    # Get font paths for the requested family, or use default
+    paths = font_families.get(font_family, [])
+
+    # Try to load the requested font
+    for font_path in paths:
+        try:
+            if Path(font_path).exists():
+                font = ImageFont.truetype(font_path, font_size)
+
+                # If emoji support is preferred, test for it
+                if prefer_emoji:
+                    test_draw = ImageDraw.Draw(Image.new("RGBA", (100, 100)))
+                    try:
+                        test_draw.textbbox((0, 0), "✨", font=font)
+                        return font  # Font supports emojis
+                    except Exception:
+                        # Font doesn't support emojis, but return it anyway if no better option
+                        pass
+
+                return font
+        except Exception:
+            continue
+
+    # If requested font not found, fall back to emoji-supporting font
+    if prefer_emoji:
+        return get_font_with_emoji_support(font_size)
+
+    # Ultimate fallback
+    try:
+        return ImageFont.load_default()
+    except Exception:
+        return None
 
 
 def get_font_with_emoji_support(font_size: int):
     """
     Load a font that supports emoji characters.
-    First tries system fonts, then falls back to default.
 
     Args:
         font_size: Size of the font
@@ -122,7 +245,7 @@ def get_font_with_emoji_support(font_size: int):
     Returns:
         ImageFont object with emoji support
     """
-    # System emoji fonts
+    # Font paths that support emojis
     emoji_font_paths = [
         # Windows emoji fonts
         "C:/Windows/Fonts/seguiemj.ttf",  # Segoe UI Emoji
@@ -176,9 +299,9 @@ def split_text_and_emoji(text: str):
         text: Input text with potential emojis
 
     Returns:
-        List of tuples (text_segment, is_emoji)
+        List of tuples (text, is_emoji)
     """
-    # Emoji pattern - matches most common emoji sequences
+    # Emoji regex pattern
     emoji_pattern = re.compile(
         "["
         "\U0001f600-\U0001f64f"  # emoticons
@@ -191,6 +314,7 @@ def split_text_and_emoji(text: str):
         "\U0001fa00-\U0001fa6f"  # Chess Symbols
         "\U0001fa70-\U0001faff"  # Symbols and Pictographs Extended-A
         "\U00002600-\U000026ff"  # Miscellaneous Symbols
+        "\U00002700-\U000027bf"  # Dingbats
         "]+",
         flags=re.UNICODE,
     )
@@ -202,7 +326,6 @@ def split_text_and_emoji(text: str):
         # Add text before emoji
         if match.start() > last_end:
             segments.append((text[last_end : match.start()], False))
-
         # Add emoji
         segments.append((match.group(), True))
         last_end = match.end()
@@ -227,16 +350,11 @@ def add_caption_to_image(
     font_family: str = "default",
 ) -> Path:
     """
-    Add a caption overlay to an image with full emoji support.
-
-    This function uses a hybrid approach:
-    - Regular text is rendered with the selected font family
-    - Emojis are automatically rendered with an emoji-supporting font
-    - All Google Fonts support emojis through this hybrid rendering
+    Add a caption overlay to an image.
 
     Args:
         image_path: Path to the input image
-        caption: Text to overlay on the image (emojis fully supported)
+        caption: Text to overlay on the image
         output_path: Path for the output image (if None, overwrites input)
         font_size: Size of the font
         position: Position of the caption ("top", "bottom", "center")
@@ -244,9 +362,7 @@ def add_caption_to_image(
         bg_color: RGBA color for the background overlay
         padding: Padding around the text
         max_width_ratio: Maximum width of text as a ratio of image width
-        font_family: Font family to use (roboto, open_sans, lato, montserrat,
-                     poppins, raleway, oswald, ubuntu, playfair, merriweather,
-                     source_sans, impact, or default)
+        font_family: Font family to use (roboto, arial, times, etc.)
 
     Returns:
         Path to the output image
@@ -259,41 +375,22 @@ def add_caption_to_image(
     overlay = Image.new("RGBA", img.size, (0, 0, 0, 0))
     draw = ImageDraw.Draw(overlay)
 
-    # Load primary font
+    # Load font with emoji support
     if font_family == "default":
-        primary_font = get_font_with_emoji_support(font_size)
-        emoji_font = primary_font  # Default font already supports emojis
+        font = get_font_with_emoji_support(font_size)
     else:
-        # Load the requested font for text
-        font_url = GOOGLE_FONTS.get(font_family)
-        if font_url:
-            font_filename = f"{font_family}.ttf"
-            font_path = download_font(font_url, font_filename)
-            if font_path:
-                try:
-                    primary_font = ImageFont.truetype(str(font_path), font_size)
-                except Exception as e:
-                    print(f"Failed to load {font_family}, using default: {e}")
-                    primary_font = get_font_with_emoji_support(font_size)
-            else:
-                primary_font = get_font_with_emoji_support(font_size)
-        else:
-            primary_font = get_font_with_emoji_support(font_size)
+        font = get_font_by_family(font_family, font_size, prefer_emoji=True)
 
-        # Always load emoji font as fallback for emojis
-        emoji_font = get_font_with_emoji_support(font_size)
-
-    if primary_font is None:
+    if font is None:
         # Ultimate fallback - use bitmap font
-        primary_font = ImageFont.load_default()
-        emoji_font = primary_font
+        font = ImageFont.load_default()
 
     # Wrap text to fit image width
     max_text_width = int(img_width * max_width_ratio)
 
     # Calculate average character width (approximate)
     try:
-        bbox = draw.textbbox((0, 0), "A", font=primary_font)
+        bbox = draw.textbbox((0, 0), "A", font=font)
         avg_char_width = bbox[2] - bbox[0]
     except Exception:
         avg_char_width = font_size // 2
@@ -306,7 +403,7 @@ def add_caption_to_image(
     total_height = 0
     for line in wrapped_lines:
         try:
-            bbox = draw.textbbox((0, 0), line, font=primary_font)
+            bbox = draw.textbbox((0, 0), line, font=font)
             line_height = bbox[3] - bbox[1]
         except Exception:
             line_height = font_size
@@ -315,79 +412,87 @@ def add_caption_to_image(
 
     # Add spacing between lines
     line_spacing = font_size // 4
-    total_height += line_spacing * (len(wrapped_lines) - 1) if len(wrapped_lines) > 1 else 0
+    total_height += line_spacing * (len(wrapped_lines) - 1)
 
-    # Calculate background rectangle dimensions
-    bg_height = total_height + (padding * 2)
-    bg_width = img_width
+    # Calculate background box dimensions
+    box_height = total_height + (padding * 2)
 
-    # Determine vertical position
+    # Determine position
     if position == "top":
-        bg_y = 0
-        text_y = padding
+        y_start = padding
     elif position == "center":
-        bg_y = (img_height - bg_height) // 2
-        text_y = bg_y + padding
+        y_start = (img_height - total_height) // 2
     else:  # bottom
-        bg_y = img_height - bg_height
-        text_y = bg_y + padding
+        y_start = img_height - box_height - padding
 
-    # Draw background rectangle
-    draw.rectangle([(0, bg_y), (bg_width, bg_y + bg_height)], fill=bg_color)
+    # Draw semi-transparent background
+    draw.rectangle(
+        [(0, y_start - padding), (img_width, y_start + total_height + padding)],
+        fill=bg_color,
+    )
 
-    # Draw each line of text with hybrid font support (text + emojis)
-    current_y = text_y
-    for line, line_height in zip(wrapped_lines, line_heights):
-        # Split line into text and emoji segments
-        segments = split_text_and_emoji(line)
+    # Draw text lines
+    current_y = y_start
+    for i, line in enumerate(wrapped_lines):
+        # Get text dimensions
+        try:
+            bbox = draw.textbbox((0, 0), line, font=font)
+            text_width = bbox[2] - bbox[0]
+        except Exception:
+            text_width = len(line) * avg_char_width
 
-        # Calculate total line width for centering
-        total_width = 0
-        segment_widths = []
-        for segment_text, is_emoji in segments:
-            try:
-                segment_font = emoji_font if is_emoji else primary_font
-                bbox = draw.textbbox((0, 0), segment_text, font=segment_font)
-                width = bbox[2] - bbox[0]
-                segment_widths.append(width)
-                total_width += width
-            except Exception:
-                width = len(segment_text) * avg_char_width
-                segment_widths.append(width)
-                total_width += width
+        # Center text horizontally
+        x = (img_width - text_width) // 2
 
-        # Start position for centered text
-        text_x = (img_width - total_width) // 2
-
-        # Draw each segment with appropriate font
-        for (segment_text, is_emoji), segment_width in zip(segments, segment_widths):
-            segment_font = emoji_font if is_emoji else primary_font
-            try:
-                draw.text((text_x, current_y), segment_text, font=segment_font, fill=text_color)
-            except Exception as e:
-                # If drawing fails, try with primary font
-                print(f"Failed to draw segment '{segment_text}': {e}")
+        # Draw text with outline for better readability
+        outline_range = 2
+        for adj_x in range(-outline_range, outline_range + 1):
+            for adj_y in range(-outline_range, outline_range + 1):
                 try:
-                    draw.text((text_x, current_y), segment_text, font=primary_font, fill=text_color)
-                except:
-                    pass  # Skip if both fail
+                    draw.text(
+                        (x + adj_x, current_y + adj_y),
+                        line,
+                        font=font,
+                        fill=(0, 0, 0, 255),  # Black outline
+                        embedded_color=True,  # Enable color emoji rendering
+                    )
+                except TypeError:
+                    # If embedded_color not supported, draw without it
+                    draw.text(
+                        (x + adj_x, current_y + adj_y),
+                        line,
+                        font=font,
+                        fill=(0, 0, 0, 255),
+                    )
 
-            text_x += segment_width
+        # Draw main text
+        try:
+            draw.text(
+                (x, current_y),
+                line,
+                font=font,
+                fill=text_color,
+                embedded_color=True,  # Enable color emoji rendering
+            )
+        except TypeError:
+            # If embedded_color not supported, draw without it
+            draw.text((x, current_y), line, font=font, fill=text_color)
 
-        current_y += line_height + line_spacing
+        current_y += line_heights[i] + line_spacing
 
     # Composite the overlay onto the original image
-    img = Image.alpha_composite(img, overlay)
+    img_with_caption = Image.alpha_composite(img, overlay)
 
-    # Save the result
+    # Convert back to RGB for saving as JPEG
+    final_img = img_with_caption.convert("RGB")
+
+    # Determine output path
     if output_path is None:
         output_path = image_path
 
-    # Convert back to RGB if saving as JPEG
-    if output_path.suffix.lower() in [".jpg", ".jpeg"]:
-        img = img.convert("RGB")
+    # Save the image
+    final_img.save(output_path, "JPEG", quality=95)
 
-    img.save(output_path)
     return output_path
 
 
@@ -403,25 +508,18 @@ def embed_caption_on_image(
     font_family: str = "default",
 ) -> str:
     """
-    Convenience wrapper for adding caption to image with full emoji support.
-
-    All fonts automatically support emojis through hybrid rendering:
-    - Text uses the selected Google Font
-    - Emojis are rendered with an emoji-supporting fallback font
-    - Seamlessly combines both for perfect rendering
+    Convenience wrapper for adding caption to image.
 
     Args:
         image_path: Path to the image file
-        caption: Caption text to embed (emojis fully supported 😀🎉👍)
+        caption: Caption text to embed
         position: Position of caption ("top", "bottom", "center")
         font_size: Font size for the caption
         text_color: RGBA color tuple for text
         bg_color: RGBA color tuple for background
         padding: Padding around text
         max_width_ratio: Maximum width of text as ratio of image width
-        font_family: Font family (roboto, open_sans, lato, montserrat, poppins,
-                     raleway, oswald, ubuntu, playfair, merriweather,
-                     source_sans, impact, or default)
+        font_family: Font family preference
 
     Returns:
         Path to the output image (same as input, modified in place)

@@ -415,129 +415,155 @@ export default function CreateContentPage() {
   };
 
   return (
-    <div className="space-y-8">
-      {/* Header */}
-      <div className="flex items-center gap-4">
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={() => router.back()}
-          className="hover:bg-slate-100 rounded-xl"
-        >
-          <ArrowLeft className="h-5 w-5" />
-        </Button>
-        <div className="flex-1">
-          <h1 className="text-4xl font-bold bg-gradient-to-r from-slate-900 via-indigo-900 to-purple-900 bg-clip-text text-transparent">
-            Create Content
-          </h1>
-          <p className="text-slate-600 mt-2 text-lg">
-            Generate AI-powered content for all your social media platforms
-          </p>
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-indigo-50/30 to-purple-50/30">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+        {/* Header */}
+        <div className="flex items-center gap-4">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => router.back()}
+            className="hover:bg-white/80 hover:shadow-md rounded-xl transition-all"
+          >
+            <ArrowLeft className="h-5 w-5" />
+          </Button>
+          <div className="flex-1">
+            <h1 className="text-4xl md:text-5xl font-bold bg-gradient-to-r from-slate-900 via-indigo-900 to-purple-900 bg-clip-text text-transparent">
+              Create Content
+            </h1>
+            <p className="text-slate-600 mt-2 text-base md:text-lg">
+              Generate AI-powered content for all your social media platforms
+            </p>
+          </div>
         </div>
-      </div>
 
-      {/* Content Generation Form */}
-      {!generatedContent && (
-        <Card className="border-0 shadow-xl bg-white/80 backdrop-blur-sm card-hover">
-          <CardHeader className="pb-4">
-            <CardTitle className="flex items-center gap-3 text-2xl">
-              <div className="p-2 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl shadow-lg">
-                <Sparkles className="h-6 w-6 text-white" />
-              </div>
-              AI Content Generator
-            </CardTitle>
-            <CardDescription className="text-base mt-2">
-              Enter a topic and let AI create platform-specific content and stunning images
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            <div className="space-y-3">
-              <Label htmlFor="topic" className="text-base font-semibold text-slate-700">Content Topic</Label>
-              <Textarea
-                id="topic"
-                placeholder="Example: 10 tips for remote work productivity, Benefits of meditation, New product launch..."
-                value={topic}
-                onChange={(e) => setTopic(e.target.value)}
-                rows={5}
-                disabled={isGenerating}
-                className="resize-none text-base border-2 focus:border-indigo-500 rounded-xl transition-all"
-              />
-              <p className="text-sm text-slate-500 flex items-start gap-2">
-                <span className="text-indigo-600 mt-0.5">💡</span>
-                <span>Be specific for better results. The AI will generate optimized captions for all platforms.</span>
-              </p>
-            </div>
-
-            {/* Caption Customizer */}
-            <CaptionCustomizer
-              settings={captionSettings}
-              onChange={setCaptionSettings}
-              previewCaption="Unleashing emotions, one dance at a time. ✨"
-            />
-
-            <div className="flex gap-3">
-              <Button
-                onClick={handleGenerate}
-                disabled={isGenerating || !topic.trim()}
-                size="lg"
-                className="flex-1 h-14 text-base font-semibold bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 shadow-lg hover:shadow-xl transition-all rounded-xl btn-shine"
-              >
-                {isGenerating ? (
-                  <>
-                    <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                    Generating Magic... (30-60s)
-                  </>
-                ) : (
-                  <>
-                    <Sparkles className="mr-2 h-5 w-5" />
-                    Generate Content
-                  </>
-                )}
-              </Button>
-            </div>
-
-            {isGenerating && (
-              <div className="bg-gradient-to-r from-indigo-50 to-purple-50 border-2 border-indigo-200 rounded-xl p-6 animate-fade-in">
-                <div className="flex items-center gap-3 mb-3">
-                  <div className="p-2 bg-indigo-600 rounded-lg">
-                    <Sparkles className="h-5 w-5 text-white animate-pulse" />
-                  </div>
-                  <p className="text-base text-indigo-900 font-semibold">
-                    AI is working its magic... ✨
+        {/* Content Generation Form */}
+        {!generatedContent && (
+          <Card className="border-0 shadow-2xl bg-white/90 backdrop-blur-sm card-hover overflow-hidden">
+            <div className="absolute top-0 right-0 w-64 h-64 bg-gradient-to-br from-indigo-500/10 to-purple-600/10 rounded-full blur-3xl -z-10" />
+            <CardHeader className="pb-6 space-y-2">
+              <CardTitle className="flex items-center gap-3 text-2xl md:text-3xl">
+                <div className="p-2.5 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl shadow-lg">
+                  <Sparkles className="h-6 w-6 text-white" />
+                </div>
+                AI Content Generator
+              </CardTitle>
+              <CardDescription className="text-base mt-2">
+                Enter a topic and let AI create platform-specific content and stunning images
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-8">
+              {/* Topic Input Section */}
+              <div className="space-y-4">
+                <Label htmlFor="topic" className="text-base font-semibold text-slate-800 flex items-center gap-2">
+                  <span className="w-2 h-2 bg-indigo-600 rounded-full" />
+                  Content Topic
+                </Label>
+                <Textarea
+                  id="topic"
+                  placeholder="Example: 10 tips for remote work productivity, Benefits of meditation, New product launch..."
+                  value={topic}
+                  onChange={(e) => setTopic(e.target.value)}
+                  rows={5}
+                  disabled={isGenerating}
+                  className="resize-none text-base border-2 border-slate-200 focus:border-indigo-500 rounded-xl transition-all shadow-sm hover:shadow-md focus:shadow-lg"
+                />
+                <div className="bg-gradient-to-r from-indigo-50 to-purple-50 border border-indigo-100 rounded-xl p-4">
+                  <p className="text-sm text-slate-700 flex items-start gap-2">
+                    <span className="text-2xl">💡</span>
+                    <span className="pt-1">
+                      <strong className="text-indigo-700">Pro tip:</strong> Be specific for better results. The AI will generate optimized captions for Facebook, Instagram, LinkedIn, Twitter, and TikTok.
+                    </span>
                   </p>
                 </div>
-                <p className="text-sm text-indigo-700 mb-3">
-                  This may take 30-60 seconds. We&apos;re generating:
-                </p>
-                <ul className="text-sm text-indigo-700 space-y-2">
-                  {[
-                    'Platform-specific captions (Facebook, Instagram, LinkedIn, Twitter, TikTok)',
-                    'Optimized image prompt for maximum engagement',
-                    'AI-generated professional image'
-                  ].map((item, index) => (
-                    <li key={index} className="flex items-center gap-2">
-                      <span className="flex-shrink-0 w-1.5 h-1.5 bg-indigo-600 rounded-full"></span>
-                      <span>{item}</span>
-                    </li>
-                  ))}
-                </ul>
               </div>
-            )}
-          </CardContent>
-        </Card>
-      )}
 
-      {/* Content Preview */}
-      {generatedContent && (
-        <ContentPreview
-          content={generatedContent}
-          onApprove={handleApprove}
-          onReject={handleReject}
-          onRegenerateCaptions={handleRegenerateCaptions}
-          onRegenerateImage={handleRegenerateImage}
-          isLoading={isGenerating}
-        />
-      )}
+              {/* Caption Customizer */}
+              <div className="space-y-3">
+                <Label className="text-base font-semibold text-slate-800 flex items-center gap-2">
+                  <span className="w-2 h-2 bg-purple-600 rounded-full" />
+                  Image Caption Settings (Optional)
+                </Label>
+                <CaptionCustomizer
+                  settings={captionSettings}
+                  onChange={setCaptionSettings}
+                  previewCaption="Unleashing emotions, one dance at a time. ✨"
+                />
+              </div>
+
+              {/* Generate Button */}
+              <div className="flex gap-3 pt-4">
+                <Button
+                  onClick={handleGenerate}
+                  disabled={isGenerating || !topic.trim()}
+                  size="lg"
+                  className="flex-1 h-16 text-lg font-semibold bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 shadow-xl hover:shadow-2xl transition-all rounded-xl btn-shine disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isGenerating ? (
+                    <>
+                      <Loader2 className="mr-3 h-6 w-6 animate-spin" />
+                      Generating Magic... (30-60s)
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="mr-3 h-6 w-6" />
+                      Generate Content
+                    </>
+                  )}
+                </Button>
+              </div>
+
+              {/* Loading State */}
+              {isGenerating && (
+                <div className="bg-gradient-to-r from-indigo-50 via-purple-50 to-pink-50 border-2 border-indigo-200 rounded-2xl p-6 animate-fade-in shadow-lg">
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="p-2.5 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-xl shadow-lg">
+                      <Sparkles className="h-6 w-6 text-white animate-pulse" />
+                    </div>
+                    <p className="text-lg text-indigo-900 font-bold">
+                      AI is working its magic... ✨
+                    </p>
+                  </div>
+                  <p className="text-sm text-indigo-800 mb-4 font-medium">
+                    This may take 30-60 seconds. We&apos;re generating:
+                  </p>
+                  <div className="space-y-3">
+                    {[
+                      { icon: '📱', text: 'Platform-specific captions (Facebook, Instagram, LinkedIn, Twitter, TikTok)' },
+                      { icon: '🎨', text: 'Optimized image prompt for maximum engagement' },
+                      { icon: '🖼️', text: 'AI-generated professional image' }
+                    ].map((item, index) => (
+                      <div key={index} className="flex items-start gap-3 bg-white/60 backdrop-blur-sm rounded-lg p-3 border border-indigo-100">
+                        <span className="text-xl flex-shrink-0">{item.icon}</span>
+                        <span className="text-sm text-slate-700 pt-0.5">{item.text}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="mt-5 flex items-center justify-center gap-2">
+                    <div className="w-2 h-2 bg-indigo-600 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                    <div className="w-2 h-2 bg-purple-600 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                    <div className="w-2 h-2 bg-pink-600 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Content Preview */}
+        {generatedContent && (
+          <div className="animate-fade-in">
+            <ContentPreview
+              content={generatedContent}
+              onApprove={handleApprove}
+              onReject={handleReject}
+              onRegenerateCaptions={handleRegenerateCaptions}
+              onRegenerateImage={handleRegenerateImage}
+              isLoading={isGenerating}
+            />
+          </div>
+        )}
+      </div>
     </div>
   );
 }
