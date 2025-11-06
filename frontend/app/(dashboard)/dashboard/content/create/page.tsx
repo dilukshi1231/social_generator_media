@@ -120,6 +120,7 @@ export default function CreateContentPage() {
 
       // Extract data from the new nested structure
       const imagePrompt = data.image_generation_prompt || '';
+      const imageCaption = data.image_caption || '';  // Extract image caption from webhook
       const captions = data.social_media_captions || {};
 
       // Map captions to our expected format
@@ -131,6 +132,7 @@ export default function CreateContentPage() {
 
       console.log('[Webhook] Extracted data:', {
         image_prompt: imagePrompt?.substring(0, 50) + '...',
+        image_caption: imageCaption?.substring(0, 50) + '...',
         has_facebook: !!facebookCaption,
         has_instagram: !!instagramCaption,
         has_linkedin: !!linkedinCaption,
@@ -160,6 +162,7 @@ export default function CreateContentPage() {
         threads_caption: tiktokCaption,
         pinterest_caption: '', // Not in new format
         image_prompt: imagePrompt,
+        image_caption: imageCaption,  // Add image caption to content object
         image_url: imageUrl,
         status: 'pending_approval',
         created_at: new Date().toISOString(),
@@ -219,6 +222,7 @@ export default function CreateContentPage() {
         twitter_caption: generatedContent.twitter_caption,
         threads_caption: generatedContent.threads_caption,
         image_prompt: generatedContent.image_prompt,
+        image_caption: generatedContent.image_caption,  // Include image caption when saving
         image_url: generatedContent.image_url,
         auto_approve: true,
       });
@@ -285,6 +289,7 @@ export default function CreateContentPage() {
 
       // Extract data from the new nested structure
       const imagePrompt = parsedData.image_generation_prompt || '';
+      const imageCaption = parsedData.image_caption || '';  // Extract image caption
       const captions = parsedData.social_media_captions || {};
 
       // Map captions to our expected format
@@ -321,6 +326,7 @@ export default function CreateContentPage() {
         threads_caption: tiktokCaption,
         pinterest_caption: '',
         image_prompt: imagePrompt || generatedContent.image_prompt || '',
+        image_caption: imageCaption || generatedContent.image_caption || '',  // Update image caption
         image_url: imageUrl || generatedContent.image_url || '',
       };
 

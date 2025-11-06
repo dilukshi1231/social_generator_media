@@ -33,6 +33,7 @@ class ContentResponse(BaseModel):
     twitter_caption: Optional[str]
     threads_caption: Optional[str]
     image_prompt: Optional[str]
+    image_caption: Optional[str]
     image_url: Optional[str]
     extra_data: Optional[dict]
     status: ContentStatus
@@ -118,6 +119,7 @@ class ContentCreateRequest(BaseModel):
     twitter_caption: Optional[str] = None
     threads_caption: Optional[str] = None
     image_prompt: Optional[str] = None
+    image_caption: Optional[str] = None
     image_url: Optional[str] = None
     auto_approve: bool = False
 
@@ -146,6 +148,7 @@ async def create_content(
             twitter_caption=request.twitter_caption,
             threads_caption=request.threads_caption,
             image_prompt=request.image_prompt,
+            image_caption=request.image_caption,
             image_url=request.image_url,
             status=(
                 ContentStatus.APPROVED

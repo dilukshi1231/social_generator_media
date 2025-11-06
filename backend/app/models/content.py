@@ -1,8 +1,19 @@
-from sqlalchemy import Column, Integer, String, Text, Boolean, DateTime, ForeignKey, Enum as SQLEnum, JSON
+from sqlalchemy import (
+    Column,
+    Integer,
+    String,
+    Text,
+    Boolean,
+    DateTime,
+    ForeignKey,
+    Enum as SQLEnum,
+    JSON,
+)
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.database import Base
 import enum
+
 
 class ContentStatus(str, enum.Enum):
     DRAFT = "draft"
@@ -12,11 +23,14 @@ class ContentStatus(str, enum.Enum):
     PUBLISHED = "published"
     FAILED = "failed"
 
+
 class Content(Base):
     __tablename__ = "contents"
 
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    user_id = Column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
 
     # Content details
     topic = Column(String, nullable=False)
@@ -31,6 +45,7 @@ class Content(Base):
 
     # Image data
     image_prompt = Column(Text, nullable=True)
+    image_caption = Column(Text, nullable=True)  # Caption for the generated image
     image_url = Column(String, nullable=True)
     image_data = Column(Text, nullable=True)  # Base64 encoded image
 
@@ -52,5 +67,6 @@ class Content(Base):
     user = relationship("User", back_populates="contents", foreign_keys=[user_id])
     approver = relationship("User", foreign_keys=[approved_by])  # Add this line
     posts = relationship("Post", back_populates="content", cascade="all, delete-orphan")
+
     def __repr__(self):
         return f"<Content {self.id} - {self.topic}>"

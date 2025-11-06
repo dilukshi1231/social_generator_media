@@ -126,6 +126,7 @@ export const contentAPI = {
     twitter_caption?: string;
     threads_caption?: string;
     image_prompt?: string;
+    image_caption?: string;
     image_url?: string;
     auto_approve?: boolean;
   }) => api.post('/api/v1/content/create', data),

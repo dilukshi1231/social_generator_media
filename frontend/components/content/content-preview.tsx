@@ -190,6 +190,15 @@ export default function ContentPreview({
               </div>
             </div>
           )}
+          {content.image_caption && (
+            <div className="mt-6 p-5 bg-gradient-to-r from-purple-50 via-pink-50 to-rose-50 rounded-xl border-2 border-purple-100 shadow-sm hover:shadow-md transition-all duration-[400ms] ease-[cubic-bezier(0.23,1,0.32,1)]">
+              <p className="text-xs font-bold text-purple-900 uppercase tracking-wider mb-3 flex items-center gap-2">
+                <ImageIcon className="h-3.5 w-3.5" />
+                Image Caption:
+              </p>
+              <p className="text-sm text-slate-700 leading-relaxed">{content.image_caption}</p>
+            </div>
+          )}
           {content.image_prompt && (
             <div className="mt-6 p-5 bg-gradient-to-r from-indigo-50 via-purple-50 to-pink-50 rounded-xl border-2 border-indigo-100 shadow-sm hover:shadow-md transition-all duration-[400ms] ease-[cubic-bezier(0.23,1,0.32,1)]">
               <p className="text-xs font-bold text-indigo-900 uppercase tracking-wider mb-3 flex items-center gap-2">
