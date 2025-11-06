@@ -1,0 +1,11 @@
+# =============================================================================
+# Trivy Vulnerability Scanner Ignore List
+# =============================================================================
+# This file contains vulnerabilities that are accepted/acknowledged
+# Format: CVE-ID or package-name
+
+# Development dependencies (not used in production)
+# Add specific CVEs here if needed
+
+# Known issues with no fix available
+# Example: CVE-2024-12345
