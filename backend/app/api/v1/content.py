@@ -452,16 +452,21 @@ async def generate_audio(
     request: AudioGenerateRequest,
     current_user: User = Depends(get_current_user),
 ):
-    """
-    Generate audio from text using ElevenLabs.
-    Perfect for creating voiceovers for social media captions and video descriptions.
-    """
+    """Generate audio from text using ElevenLabs."""
     try:
+        print(f"[API] Received audio generation request")
+        print(f"[API] Text length: {len(request.text)}")
+        print(f"[API] Voice ID: {request.voice_id}")
+        
         elevenlabs = ElevenLabsService()
         result = await elevenlabs.generate_audio(
             text=request.text,
             voice_id=request.voice_id
         )
+        
+        print(f"[API] Result: {result.get('success')}")
+        if not result.get("success"):
+            print(f"[API] Error: {result.get('error')}")
         
         if not result.get("success"):
             raise HTTPException(
@@ -472,17 +477,19 @@ async def generate_audio(
         return AudioGenerateResponse(**result)
         
     except ValueError as e:
+        print(f"[API] ValueError: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e)
         )
     except Exception as e:
+        print(f"[API] Exception: {str(e)}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to generate audio: {str(e)}"
         )
-
-
 @router.post("/generate-audio-for-caption/{content_id}", response_model=AudioGenerateResponse)
 async def generate_audio_for_content_caption(
     content_id: int,
