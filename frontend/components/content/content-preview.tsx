@@ -8,7 +8,7 @@ import { useToast } from '@/components/ui/use-toast';
 import type { Content } from '@/types';
 import Image from 'next/image';
 import PublishDialog from '@/components/content/publish-dialog';
-
+import VideoPlayerWithAudio from '@/components/content/video-player-with-audio';
 // X (Twitter) Icon Component
 const XIcon = ({ className }: { className?: string }) => (
   <svg viewBox="0 0 24 24" fill="currentColor" className={className}>

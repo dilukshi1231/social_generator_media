@@ -3,39 +3,46 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update
 from typing import List, Optional
 from datetime import datetime
+import httpx
+import base64
+import tempfile
+import os
+from pathlib import Path
 
 from app.database import get_db
 from app.models.user import User
 from app.models.content import Content, ContentStatus
 from app.services.elevenlabs_service import ElevenLabsService
-# Note: Posting is handled via posts API; no need to import SocialAccount/Post here
 from app.api.v1.auth import get_current_user
 from app.services.content_generator import ContentGeneratorService
 from pydantic import BaseModel
-# Add these imports at the top of content.py
 from app.services.pexels_service import PexelsService
 from app.services.keyword_extractor import KeywordExtractorService
-
+from app.core.config import settings
 
 router = APIRouter()
 
 
-# Schemas
+# ============================================================================
+# SCHEMAS
+# ============================================================================
 
-# Add this new schema class with the other schemas
 class VideoSearchRequest(BaseModel):
     prompt: str
     per_page: int = 5
+
 
 class VideoSearchResponse(BaseModel):
     success: bool
     query: str
     total_results: int
     videos: List[dict]
-# Add these new schemas with the other schemas in content.py
+
+
 class AudioGenerateRequest(BaseModel):
     text: str
-    voice_id: Optional[str] = "21m00Tcm4TlvDq8ikWAM"  # Default voice
+    voice_id: Optional[str] = "21m00Tcm4TlvDq8ikWAM"
+
 
 class AudioGenerateResponse(BaseModel):
     success: bool
@@ -45,70 +52,27 @@ class AudioGenerateResponse(BaseModel):
     voice_id: Optional[str] = None
     error: Optional[str] = None
 
+
 class VoicesResponse(BaseModel):
     success: bool
     voices: Optional[List[dict]] = None
     error: Optional[str] = None
 
-# Update the search-videos endpoint
-@router.post("/search-videos", response_model=VideoSearchResponse)
-async def search_videos(
-    request: VideoSearchRequest,
-    current_user: User = Depends(get_current_user),
-):
-    """
-    Search for videos on Pexels based on the prompt.
-    Automatically extracts 3-4 keywords from detailed prompts.
-    """
-    print(f"[VIDEO SEARCH] User: {current_user.email}")
-    print(f"[VIDEO SEARCH] Original prompt: {request.prompt}")
-    print(f"[VIDEO SEARCH] Per page: {request.per_page}")
-    
-    try:
-        # Step 1: Extract keywords from the prompt
-        keyword_extractor = KeywordExtractorService()
-        search_keywords = await keyword_extractor.extract_keywords(
-            prompt=request.prompt,
-            max_keywords=4  # Extract 3-4 keywords
-        )
-        
-        print(f"[VIDEO SEARCH] Extracted keywords: {search_keywords}")
-        
-        # Step 2: Search Pexels with the extracted keywords
-        pexels = PexelsService()
-        result = await pexels.search_videos(
-            query=search_keywords,  # Use extracted keywords instead of full prompt
-            per_page=request.per_page
-        )
-        
-        print(f"[VIDEO SEARCH] Result success: {result.get('success')}")
-        print(f"[VIDEO SEARCH] Videos found: {len(result.get('videos', []))}")
-        
-        if not result.get("success"):
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=result.get("error", "Failed to search videos")
-            )
-        
-        return VideoSearchResponse(
-            success=True,
-            query=search_keywords,  # Return the keywords that were actually used
-            total_results=result["total_results"],
-            videos=result["videos"]
-        )
-        
-    except ValueError as e:
-        print(f"[VIDEO SEARCH] ValueError: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
-    except Exception as e:
-        print(f"[VIDEO SEARCH] Exception: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to search videos: {str(e)}"
-        )
+
+class VideoAnalyzeRequest(BaseModel):
+    video_url: str
+    video_id: int
+    duration: float
+
+
+class VideoAnalyzeResponse(BaseModel):
+    success: bool
+    description: str
+    video_id: int
+    analysis_details: Optional[dict] = None
+    error: Optional[str] = None
+
+
 class ContentGenerateRequest(BaseModel):
     topic: str
     auto_approve: bool = False
@@ -138,6 +102,489 @@ class ContentApprovalRequest(BaseModel):
     feedback: Optional[str] = None
 
 
+class ContentCreateRequest(BaseModel):
+    topic: str
+    facebook_caption: Optional[str] = None
+    instagram_caption: Optional[str] = None
+    linkedin_caption: Optional[str] = None
+    pinterest_caption: Optional[str] = None
+    twitter_caption: Optional[str] = None
+    threads_caption: Optional[str] = None
+    image_prompt: Optional[str] = None
+    image_url: Optional[str] = None
+    auto_approve: bool = False
+
+
+class ImageGenerateRequest(BaseModel):
+    prompt: str
+
+
+class ImageGenerateResponse(BaseModel):
+    image_url: str
+    file_path: str
+
+
+# ============================================================================
+# VIDEO SEARCH
+# ============================================================================
+
+@router.post("/search-videos", response_model=VideoSearchResponse)
+async def search_videos(
+    request: VideoSearchRequest,
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Search for videos on Pexels based on the prompt.
+    Automatically extracts 3-4 keywords from detailed prompts.
+    """
+    print(f"[VIDEO SEARCH] User: {current_user.email}")
+    print(f"[VIDEO SEARCH] Original prompt: {request.prompt}")
+    print(f"[VIDEO SEARCH] Per page: {request.per_page}")
+    
+    try:
+        # Step 1: Extract keywords from the prompt
+        keyword_extractor = KeywordExtractorService()
+        search_keywords = await keyword_extractor.extract_keywords(
+            prompt=request.prompt,
+            max_keywords=4
+        )
+        
+        print(f"[VIDEO SEARCH] Extracted keywords: {search_keywords}")
+        
+        # Step 2: Search Pexels with the extracted keywords
+        pexels = PexelsService()
+        result = await pexels.search_videos(
+            query=search_keywords,
+            per_page=request.per_page
+        )
+        
+        print(f"[VIDEO SEARCH] Result success: {result.get('success')}")
+        print(f"[VIDEO SEARCH] Videos found: {len(result.get('videos', []))}")
+        
+        if not result.get("success"):
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=result.get("error", "Failed to search videos")
+            )
+        
+        return VideoSearchResponse(
+            success=True,
+            query=search_keywords,
+            total_results=result["total_results"],
+            videos=result["videos"]
+        )
+        
+    except ValueError as e:
+        print(f"[VIDEO SEARCH] ValueError: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+    except Exception as e:
+        print(f"[VIDEO SEARCH] Exception: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to search videos: {str(e)}"
+        )
+
+
+# ============================================================================
+# VIDEO ANALYSIS (Using Free Gemini Vision)
+# ============================================================================
+
+@router.post("/analyze-video", response_model=VideoAnalyzeResponse)
+async def analyze_video(
+    request: VideoAnalyzeRequest,
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Analyze video content using FREE Google Gemini Vision API.
+    Downloads video, extracts key frames, analyzes them, and generates description.
+    """
+    try:
+        print(f"[Video Analysis] Starting analysis for video {request.video_id}")
+        print(f"[Video Analysis] Video URL: {request.video_url}")
+        print(f"[Video Analysis] Duration: {request.duration}s")
+        
+        # Step 1: Download video temporarily
+        video_path = await download_video_temporarily(request.video_url, request.video_id)
+        
+        # Step 2: Extract key frames from video
+        frames = await extract_video_frames(video_path, num_frames=5)
+        
+        # Step 3: Analyze frames with Gemini Vision (FREE)
+        description = await analyze_frames_with_gemini(frames, request.duration)
+        
+        # Step 4: Cleanup
+        cleanup_temp_files(video_path, frames)
+        
+        print(f"[Video Analysis] Analysis complete!")
+        print(f"[Video Analysis] Description length: {len(description)} chars")
+        
+        return VideoAnalyzeResponse(
+            success=True,
+            description=description,
+            video_id=request.video_id,
+            analysis_details={
+                "frames_analyzed": len(frames),
+                "duration": request.duration,
+            }
+        )
+        
+    except Exception as e:
+        print(f"[Video Analysis] Error: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to analyze video: {str(e)}"
+        )
+
+
+async def download_video_temporarily(video_url: str, video_id: int) -> str:
+    """Download video to temporary file."""
+    print(f"[Download] Downloading video from: {video_url}")
+    
+    temp_dir = Path(tempfile.gettempdir()) / "video_analysis"
+    temp_dir.mkdir(exist_ok=True)
+    
+    video_path = temp_dir / f"video_{video_id}_{os.getpid()}.mp4"
+    
+    async with httpx.AsyncClient(timeout=60.0) as client:
+        response = await client.get(video_url)
+        response.raise_for_status()
+        
+        with open(video_path, 'wb') as f:
+            f.write(response.content)
+    
+    print(f"[Download] Video saved to: {video_path}")
+    return str(video_path)
+
+
+async def extract_video_frames(video_path: str, num_frames: int = 5) -> list[str]:
+    """Extract evenly spaced frames from video as base64 images."""
+    print(f"[Frame Extraction] Extracting {num_frames} frames from video")
+    
+    try:
+        import cv2
+    except ImportError:
+        raise ValueError(
+            "opencv-python is required for video analysis. "
+            "Install with: pip install opencv-python"
+        )
+    
+    frames = []
+    cap = cv2.VideoCapture(video_path)
+    
+    if not cap.isOpened():
+        raise ValueError(f"Failed to open video file: {video_path}")
+    
+    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    
+    if total_frames == 0:
+        cap.release()
+        raise ValueError("Video has no frames")
+    
+    frame_interval = max(1, total_frames // num_frames)
+    
+    print(f"[Frame Extraction] Total frames: {total_frames}, Interval: {frame_interval}")
+    
+    frame_indices = [i * frame_interval for i in range(num_frames)]
+    
+    for idx in frame_indices:
+        cap.set(cv2.CAP_PROP_POS_FRAMES, idx)
+        ret, frame = cap.read()
+        
+        if ret:
+            # Resize frame to reduce size (max 1024px width)
+            height, width = frame.shape[:2]
+            if width > 1024:
+                scale = 1024 / width
+                new_width = 1024
+                new_height = int(height * scale)
+                frame = cv2.resize(frame, (new_width, new_height))
+            
+            # Convert to JPEG with good quality
+            _, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
+            frame_base64 = base64.b64encode(buffer).decode('utf-8')
+            frames.append(frame_base64)
+            print(f"[Frame Extraction] Extracted frame {len(frames)}/{num_frames}")
+    
+    cap.release()
+    print(f"[Frame Extraction] Extraction complete: {len(frames)} frames")
+    
+    if len(frames) == 0:
+        raise ValueError("Failed to extract any frames from video")
+    
+    return frames
+
+
+async def analyze_frames_with_gemini(frames: list[str], duration: float) -> str:
+    """
+    Analyze video frames using FREE Google Gemini Vision API.
+    Gemini 2.0 Flash is completely FREE with high rate limits.
+    """
+    print(f"[Gemini Analysis] Analyzing {len(frames)} frames")
+    
+    if not settings.GEMINI_API_KEY or settings.GEMINI_API_KEY.strip() == "":
+        raise ValueError(
+            "GEMINI_API_KEY is not configured. "
+            "Get a FREE API key from: https://aistudio.google.com/app/apikey"
+        )
+    
+    # Create prompt for video description
+    prompt = f"""You are a professional video narrator. Analyze these {len(frames)} frames from a {duration:.1f}-second video and create a detailed, engaging narration script.
+
+Your narration should:
+1. Describe what's happening in the video chronologically
+2. Mention key visual elements, actions, people, objects, and settings
+3. Use descriptive, engaging language suitable for voiceover
+4. Be natural and conversational, as if you're narrating for a documentary
+5. Include smooth transitions between scenes/moments
+6. Be approximately 30-60 seconds of spoken narration (100-200 words)
+7. Focus on what viewers can SEE in the video
+8. Start directly with the description, no preamble
+
+DO NOT:
+- Speculate about things not visible
+- Add opinions or judgments
+- Use hashtags or social media language
+- Mention "frame 1, frame 2" etc.
+- Start with "This video shows..." or similar phrases
+
+Create a flowing narrative that describes this video as if you're watching it unfold in real-time."""
+
+    # Prepare content for Gemini
+    content_parts = [{"text": prompt}]
+    
+    # Add each frame
+    for frame_base64 in frames:
+        content_parts.append({
+            "inline_data": {
+                "mime_type": "image/jpeg",
+                "data": frame_base64
+            }
+        })
+    
+    async with httpx.AsyncClient(timeout=120.0) as client:
+        # Using Gemini 2.0 Flash Experimental - FREE with high limits
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key={settings.GEMINI_API_KEY}"
+        
+        payload = {
+            "contents": [{
+                "parts": content_parts
+            }],
+            "generationConfig": {
+                "temperature": 0.7,
+                "maxOutputTokens": 500,
+                "topP": 0.95,
+                "topK": 40
+            }
+        }
+        
+        print(f"[Gemini Analysis] Sending request to Gemini API...")
+        
+        try:
+            response = await client.post(url, json=payload)
+            response.raise_for_status()
+        except httpx.HTTPStatusError as e:
+            print(f"[Gemini Analysis] HTTP Error: {e.response.status_code}")
+            print(f"[Gemini Analysis] Response: {e.response.text}")
+            if e.response.status_code == 400:
+                raise ValueError(
+                    "Invalid Gemini API request. Check your API key and frame sizes. "
+                    f"Error: {e.response.text}"
+                )
+            elif e.response.status_code == 429:
+                raise ValueError(
+                    "Gemini API rate limit exceeded. Please try again in a few seconds."
+                )
+            else:
+                raise ValueError(f"Gemini API error: {e.response.text}")
+        
+        result = response.json()
+        
+        # Extract description
+        try:
+            candidates = result.get("candidates", [])
+            if not candidates:
+                print(f"[Gemini Analysis] Full response: {result}")
+                raise ValueError("No candidates in Gemini response")
+            
+            content_obj = candidates[0].get("content", {})
+            parts = content_obj.get("parts", [])
+            
+            if not parts:
+                print(f"[Gemini Analysis] Candidate: {candidates[0]}")
+                raise ValueError("No parts in Gemini response")
+            
+            description = parts[0].get("text", "")
+            
+            if not description:
+                raise ValueError("No text content in Gemini response")
+            
+            print(f"[Gemini Analysis] Analysis complete: {len(description)} characters")
+            return description.strip()
+            
+        except (KeyError, IndexError) as e:
+            print(f"[Gemini Analysis] Parse error: {str(e)}")
+            print(f"[Gemini Analysis] Full response: {result}")
+            raise ValueError(f"Failed to parse Gemini response: {str(e)}")
+
+
+def cleanup_temp_files(video_path: str, frames: list[str]):
+    """Clean up temporary video file."""
+    try:
+        if os.path.exists(video_path):
+            os.remove(video_path)
+            print(f"[Cleanup] Removed temp video: {video_path}")
+    except Exception as e:
+        print(f"[Cleanup] Failed to remove temp files: {str(e)}")
+
+
+# ============================================================================
+# AUDIO GENERATION (Using ElevenLabs)
+# ============================================================================
+
+@router.post("/generate-audio", response_model=AudioGenerateResponse)
+async def generate_audio(
+    request: AudioGenerateRequest,
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Generate audio from text using ElevenLabs.
+    Perfect for creating voiceovers for social media captions and video descriptions.
+    """
+    try:
+        elevenlabs = ElevenLabsService()
+        result = await elevenlabs.generate_audio(
+            text=request.text,
+            voice_id=request.voice_id
+        )
+        
+        if not result.get("success"):
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=result.get("error", "Failed to generate audio")
+            )
+        
+        return AudioGenerateResponse(**result)
+        
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to generate audio: {str(e)}"
+        )
+
+
+@router.post("/generate-audio-for-caption/{content_id}", response_model=AudioGenerateResponse)
+async def generate_audio_for_content_caption(
+    content_id: int,
+    platform: str = "instagram",
+    voice_id: str = "21m00Tcm4TlvDq8ikWAM",
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Generate audio from a specific content's caption.
+    Automatically cleans and processes the caption for audio generation.
+    """
+    result = await db.execute(
+        select(Content).where(
+            Content.id == content_id,
+            Content.user_id == current_user.id
+        )
+    )
+    content = result.scalar_one_or_none()
+
+    if not content:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Content not found"
+        )
+
+    caption_map = {
+        "facebook": content.facebook_caption,
+        "instagram": content.instagram_caption,
+        "linkedin": content.linkedin_caption,
+        "twitter": content.twitter_caption,
+        "threads": content.threads_caption,
+    }
+
+    caption = caption_map.get(platform.lower(), content.instagram_caption)
+
+    if not caption:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"No caption found for {platform}"
+        )
+
+    try:
+        elevenlabs = ElevenLabsService()
+        result = await elevenlabs.generate_audio_for_caption(
+            caption=caption,
+            voice_id=voice_id
+        )
+        
+        if not result.get("success"):
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=result.get("error", "Failed to generate audio")
+            )
+        
+        return AudioGenerateResponse(**result)
+        
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to generate audio: {str(e)}"
+        )
+
+
+@router.get("/voices", response_model=VoicesResponse)
+async def get_available_voices(
+    current_user: User = Depends(get_current_user),
+):
+    """Get list of available voices from ElevenLabs."""
+    try:
+        elevenlabs = ElevenLabsService()
+        result = await elevenlabs.get_voices()
+        
+        if not result.get("success"):
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=result.get("error", "Failed to fetch voices")
+            )
+        
+        return VoicesResponse(**result)
+        
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch voices: {str(e)}"
+        )
+
+
+# ============================================================================
+# CONTENT GENERATION
+# ============================================================================
+
 @router.post(
     "/generate", response_model=ContentResponse, status_code=status.HTTP_201_CREATED
 )
@@ -149,21 +596,12 @@ async def generate_content(
 ):
     """
     Generate AI content for social media platforms.
-
-    This endpoint:
-    1. Generates platform-specific captions
-    2. Creates an image prompt
-    3. Generates an AI image
-    4. Saves everything to the database
     """
-    # Initialize content generator
     generator = ContentGeneratorService()
 
     try:
-        # Generate complete content package
         content_data = await generator.generate_complete_content(request.topic)
 
-        # Create content record
         new_content = Content(
             user_id=current_user.id,
             topic=request.topic,
@@ -182,7 +620,7 @@ async def generate_content(
                 else ContentStatus.PENDING_APPROVAL
             ),
             approved_at=datetime.utcnow() if request.auto_approve else None,
-            extra_data={  # Changed from metadata to extra_data
+            extra_data={
                 "image_mime": content_data.get("image_mime"),
                 "generated_at": datetime.utcnow().isoformat(),
             },
@@ -200,19 +638,6 @@ async def generate_content(
         )
 
 
-class ContentCreateRequest(BaseModel):
-    topic: str
-    facebook_caption: Optional[str] = None
-    instagram_caption: Optional[str] = None
-    linkedin_caption: Optional[str] = None
-    pinterest_caption: Optional[str] = None
-    twitter_caption: Optional[str] = None
-    threads_caption: Optional[str] = None
-    image_prompt: Optional[str] = None
-    image_url: Optional[str] = None
-    auto_approve: bool = False
-
-
 @router.post(
     "/create", response_model=ContentResponse, status_code=status.HTTP_201_CREATED
 )
@@ -221,12 +646,8 @@ async def create_content(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """
-    Create and save content that was generated via webhook (n8n).
-    This endpoint saves content without generating it.
-    """
+    """Create and save content (from webhook or manual)."""
     try:
-        # Create content record
         new_content = Content(
             user_id=current_user.id,
             topic=request.topic,
@@ -328,20 +749,17 @@ async def approve_content(
         )
 
     if approval.approved:
-        # Mark as approved only; posting will be handled explicitly via /posts
         content.status = ContentStatus.APPROVED
         content.approved_at = datetime.utcnow()
         content.approved_by = current_user.id
     else:
         content.status = ContentStatus.REJECTED
         if approval.feedback:
-            # Build a safe JSON dict for extra_data and persist via a direct UPDATE
             extra = content.extra_data or {}
             if not isinstance(extra, dict):
                 extra = {}
             extra["rejection_feedback"] = approval.feedback
 
-            # Use an explicit UPDATE statement to ensure JSON is persisted
             await db.execute(
                 update(Content).where(Content.id == content_id).values(extra_data=extra)
             )
@@ -396,14 +814,11 @@ async def regenerate_image(
             status_code=status.HTTP_404_NOT_FOUND, detail="Content not found"
         )
 
-    # Initialize generator
     generator = ContentGeneratorService()
 
     try:
-        # Regenerate image
         image_data = await generator.generate_image_from_prompt(content.image_prompt)
 
-        # Update content
         content.image_data = (
             image_data.split(",")[1] if image_data and "," in image_data else None
         )
@@ -416,15 +831,11 @@ async def regenerate_image(
         return content
 
     except ValueError as e:
-        # This is likely an API configuration error
         await db.rollback()
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     except Exception as e:
-        # Rollback any changes
         await db.rollback()
-        # Log the full error for debugging
         import traceback
-
         print(f"Error regenerating image: {str(e)}")
         print(traceback.format_exc())
         raise HTTPException(
@@ -452,14 +863,11 @@ async def regenerate_captions(
             status_code=status.HTTP_404_NOT_FOUND, detail="Content not found"
         )
 
-    # Initialize generator
     generator = ContentGeneratorService()
 
     try:
-        # Regenerate captions
         captions = await generator.generate_platform_captions(content.topic)
 
-        # Update content
         content.facebook_caption = captions.get("facebook")
         content.instagram_caption = captions.get("instagram")
         content.linkedin_caption = captions.get("linkedin")
@@ -474,30 +882,17 @@ async def regenerate_captions(
         return content
 
     except ValueError as e:
-        # This is likely an API configuration error
         await db.rollback()
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     except Exception as e:
-        # Rollback any changes
         await db.rollback()
-        # Log the full error for debugging
         import traceback
-
         print(f"Error regenerating captions: {str(e)}")
         print(traceback.format_exc())
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to regenerate captions: {str(e)}",
         )
-
-
-class ImageGenerateRequest(BaseModel):
-    prompt: str
-
-
-class ImageGenerateResponse(BaseModel):
-    image_url: str
-    file_path: str
 
 
 @router.post("/generate-image-proxy", response_model=ImageGenerateResponse)
@@ -510,10 +905,6 @@ async def generate_image_proxy(
     This avoids CORS issues by making the request from the backend.
     Saves the image to disk and returns the file path.
     """
-    import httpx
-    import os
-    from datetime import datetime
-    from pathlib import Path
     import uuid
 
     cloudflare_url = os.getenv(
@@ -570,141 +961,4 @@ async def generate_image_proxy(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to generate image: {str(e)}",
-        )
-    
-@router.post("/generate-audio", response_model=AudioGenerateResponse)
-async def generate_audio(
-    request: AudioGenerateRequest,
-    current_user: User = Depends(get_current_user),
-):
-    """
-    Generate audio from text using ElevenLabs.
-    Perfect for creating voiceovers for social media captions.
-    """
-    try:
-        elevenlabs = ElevenLabsService()
-        result = await elevenlabs.generate_audio(
-            text=request.text,
-            voice_id=request.voice_id
-        )
-        
-        if not result.get("success"):
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=result.get("error", "Failed to generate audio")
-            )
-        
-        return AudioGenerateResponse(**result)
-        
-    except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to generate audio: {str(e)}"
-        )
-
-
-@router.post("/generate-audio-for-caption/{content_id}", response_model=AudioGenerateResponse)
-async def generate_audio_for_content_caption(
-    content_id: int,
-    platform: str = "instagram",  # Default platform
-    voice_id: str = "21m00Tcm4TlvDq8ikWAM",
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-):
-    """
-    Generate audio from a specific content's caption.
-    Automatically cleans and processes the caption for audio generation.
-    """
-    # Get content
-    result = await db.execute(
-        select(Content).where(
-            Content.id == content_id,
-            Content.user_id == current_user.id
-        )
-    )
-    content = result.scalar_one_or_none()
-
-    if not content:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Content not found"
-        )
-
-    # Get caption based on platform
-    caption_map = {
-        "facebook": content.facebook_caption,
-        "instagram": content.instagram_caption,
-        "linkedin": content.linkedin_caption,
-        "twitter": content.twitter_caption,
-        "threads": content.threads_caption,
-    }
-
-    caption = caption_map.get(platform.lower(), content.instagram_caption)
-
-    if not caption:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"No caption found for {platform}"
-        )
-
-    try:
-        elevenlabs = ElevenLabsService()
-        result = await elevenlabs.generate_audio_for_caption(
-            caption=caption,
-            voice_id=voice_id
-        )
-        
-        if not result.get("success"):
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=result.get("error", "Failed to generate audio")
-            )
-        
-        return AudioGenerateResponse(**result)
-        
-    except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to generate audio: {str(e)}"
-        )
-
-
-@router.get("/voices", response_model=VoicesResponse)
-async def get_available_voices(
-    current_user: User = Depends(get_current_user),
-):
-    """
-    Get list of available voices from ElevenLabs.
-    """
-    try:
-        elevenlabs = ElevenLabsService()
-        result = await elevenlabs.get_voices()
-        
-        if not result.get("success"):
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=result.get("error", "Failed to fetch voices")
-            )
-        
-        return VoicesResponse(**result)
-        
-    except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to fetch voices: {str(e)}"
         )
