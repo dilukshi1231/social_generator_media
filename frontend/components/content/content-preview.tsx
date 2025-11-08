@@ -232,7 +232,77 @@ export default function ContentPreview({
       setIsGeneratingAudio(false);
     }
   };
+  // Updated content-preview.tsx with AI summarization
+// Add this new state and function at the top of your component:
 
+const [summarizedPrompt, setSummarizedPrompt] = useState<string>('');
+const [isSummarizing, setIsSummarizing] = useState(false);
+
+// Add this function to summarize the video prompt using Gemini API
+const summarizeVideoPrompt = async (fullPrompt: string): Promise<string> => {
+  if (!fullPrompt || fullPrompt.trim() === '') {
+    return '';
+  }
+
+  // Check word count first
+  const wordCount = fullPrompt.trim().split(/\s+/).length;
+  if (wordCount <= 50) {
+    // Already short enough, no need to summarize
+    return fullPrompt;
+  }
+
+  setIsSummarizing(true);
+  try {
+    const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+    const token = localStorage.getItem('access_token');
+
+    if (!token) {
+      throw new Error('No authentication token found');
+    }
+
+    // Call backend to summarize using Gemini
+    const response = await fetch(`${API_URL}/api/v1/content/summarize-prompt`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        prompt: fullPrompt,
+        max_words: 50,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to summarize prompt');
+    }
+
+    const data = await response.json();
+    return data.summarized_prompt || fullPrompt;
+
+  } catch (error) {
+    console.error('[Summarize] Error:', error);
+    toast({
+      title: 'Summarization failed',
+      description: 'Using original prompt',
+      variant: 'destructive',
+    });
+    // Fallback: Simple word limit
+    return fullPrompt.split(/\s+/).slice(0, 50).join(' ') + '...';
+  } finally {
+    setIsSummarizing(false);
+  }
+};
+
+// Add this useEffect to summarize when content loads
+useEffect(() => {
+  const prompt = content.image_prompt || content.topic;
+  if (prompt) {
+    summarizeVideoPrompt(prompt).then(setSummarizedPrompt);
+  }
+}, [content.image_prompt, content.topic]);
+
+// Replace the "AI Voiceover Generation" Card section:
   // Play/Pause audio
   const toggleAudioPlayback = () => {
     if (!audioData?.audio_data_url) return;
@@ -502,139 +572,161 @@ export default function ContentPreview({
         </CardContent>
       </Card>
 
-      {/* Audio Generation Section */}
-      <Card className="border-0 shadow-2xl bg-white/80">
-        <CardHeader className="bg-gradient-to-r from-orange-50 via-pink-50 to-purple-50 border-b-2 border-slate-100">
-          <CardTitle className="flex items-center gap-3 text-xl">
-            <div className="p-3 bg-gradient-to-br from-orange-600 to-pink-600 rounded-xl shadow-lg">
-              <Volume2 className="h-6 w-6 text-white" />
-            </div>
-            <span className="bg-gradient-to-r from-orange-700 to-pink-700 bg-clip-text text-transparent font-bold">
-              AI Voiceover Generation
-            </span>
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="p-6">
-          <div className="space-y-6">
-            {/* Voice and Platform Selection */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">
-                  Select Platform Caption
-                </label>
-                <select
-                  value={selectedPlatformForAudio}
-                  onChange={(e) => {
-                    setSelectedPlatformForAudio(e.target.value);
-                    // Reset audio when platform changes
-                    setAudioData(null);
-                    if (audioElement) {
-                      audioElement.pause();
-                      setIsPlayingAudio(false);
-                    }
-                  }}
-                  className="w-full p-3 border-2 border-slate-200 rounded-xl focus:border-orange-400 focus:outline-none bg-white"
-                >
-                  <option value="instagram">Instagram Caption</option>
-                  <option value="facebook">Facebook Caption</option>
-                  <option value="linkedin">LinkedIn Caption</option>
-                  <option value="twitter">Twitter Caption</option>
-                  <option value="tiktok">TikTok Caption</option>
-                </select>
-              </div>
+      // UPDATED: content-preview.tsx changes
+// 1. Remove this state (no longer needed):
+// const [selectedPlatformForAudio, setSelectedPlatformForAudio] = useState('instagram');
 
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">
-                  Select Voice
-                </label>
-                <select
-                  value={selectedVoice}
-                  onChange={(e) => setSelectedVoice(e.target.value)}
-                  className="w-full p-3 border-2 border-slate-200 rounded-xl focus:border-orange-400 focus:outline-none bg-white"
-                >
-                  <option value="21m00Tcm4TlvDq8ikWAM">Rachel - Natural, Clear</option>
-                  <option value="AZnzlk1XvdvUeBnXmlld">Domi - Strong, Confident</option>
-                  <option value="EXAVITQu4vr4xnSDxMaL">Bella - Soft, Warm</option>
-                  <option value="ErXwobaYiN019PkySvjV">Antoni - Well-rounded</option>
-                  <option value="MF3mGyEYCl7XYWbV9V6O">Elli - Emotional</option>
-                  <option value="TxGEqnHWrfWFTfGW9XjX">Josh - Deep, Authoritative</option>
-                  <option value="VR6AewLTigWG4xSOukaG">Arnold - Crisp, Professional</option>
-                  <option value="pNInz6obpgDQGcFmaJgB">Adam - Narrative Style</option>
-                </select>
-              </div>
-            </div>
+// 2. Update the generateAudio function call to use content.image_prompt:
+// Replace existing generateAudio usage
 
-            {/* Generate Button */}
-            <Button
-              onClick={() => generateAudio(getCurrentCaption())}
-              disabled={isGeneratingAudio || !getCurrentCaption()}
-              className="w-full h-14 text-lg bg-gradient-to-r from-orange-600 to-pink-600 hover:from-orange-700 hover:to-pink-700"
-            >
-              {isGeneratingAudio ? (
-                <>
-                  <Loader2 className="h-5 w-5 mr-2 animate-spin" />
-                  Generating Voiceover...
-                </>
-              ) : (
-                <>
-                  <Volume2 className="h-5 w-5 mr-2" />
-                  Generate Voiceover
-                </>
-              )}
-            </Button>
+// 3. Replace the entire "AI Voiceover Generation" Card section with this:
 
-            {/* Audio Player */}
-            {audioData && audioData.success && (
-              <div className="p-6 bg-gradient-to-r from-orange-50 to-pink-50 rounded-xl border-2 border-orange-200">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-4">
-                    <Button
-                      onClick={toggleAudioPlayback}
-                      size="lg"
-                      className="bg-gradient-to-r from-orange-600 to-pink-600 hover:from-orange-700 hover:to-pink-700"
-                    >
-                      {isPlayingAudio ? (
-                        <>
-                          <Pause className="h-5 w-5 mr-2" />
-                          Pause
-                        </>
-                      ) : (
-                        <>
-                          <Play className="h-5 w-5 mr-2" />
-                          Play
-                        </>
-                      )}
-                    </Button>
-                    <div className="text-sm text-slate-600">
-                      <p className="font-semibold flex items-center gap-2">
-                        <Volume2 className="h-4 w-4 text-orange-600" />
-                        Audio Ready!
-                      </p>
-                      <p>Size: {audioData.size_bytes ? (audioData.size_bytes / 1024).toFixed(1) : '0'} KB</p>
-                    </div>
-                  </div>
-                  <Button
-                    onClick={downloadAudio}
-                    variant="outline"
-                    className="border-orange-300 hover:bg-orange-50"
-                  >
-                    <Download className="h-4 w-4 mr-2" />
-                    Download MP3
-                  </Button>
-                </div>
-              </div>
-            )}
 
-            {/* Caption Preview */}
-            <div className="p-4 bg-slate-50 rounded-xl border-2 border-slate-200">
-              <p className="text-xs font-medium text-slate-500 mb-2">Caption Preview:</p>
-              <p className="text-sm text-slate-700 line-clamp-3">
-                {getCurrentCaption() || 'No caption available'}
-              </p>
-            </div>
+{/* Audio Generation Section */}
+<Card className="border-0 shadow-2xl bg-white/80">
+  <CardHeader className="bg-gradient-to-r from-orange-50 via-pink-50 to-purple-50 border-b-2 border-slate-100">
+    <CardTitle className="flex items-center gap-3 text-xl">
+      <div className="p-3 bg-gradient-to-br from-orange-600 to-pink-600 rounded-xl shadow-lg">
+        <Volume2 className="h-6 w-6 text-white" />
+      </div>
+      <span className="bg-gradient-to-r from-orange-700 to-pink-700 bg-clip-text text-transparent font-bold">
+        AI Voiceover Generation
+      </span>
+    </CardTitle>
+  </CardHeader>
+  <CardContent className="p-6">
+    <div className="space-y-6">
+      {/* Summarized Video Prompt Display (Read-only) */}
+      <div>
+        <label className="block text-sm font-medium text-slate-700 mb-2 flex items-center gap-2">
+          Video Prompt Summary (Max 50 words)
+          {isSummarizing && (
+            <Loader2 className="h-4 w-4 animate-spin text-orange-600" />
+          )}
+        </label>
+        <div className="relative">
+          <textarea
+            value={isSummarizing ? 'Summarizing prompt...' : (summarizedPrompt || 'Loading...')}
+            readOnly
+            rows={3}
+            className="w-full p-3 border-2 border-slate-200 rounded-xl bg-slate-50 text-slate-700 resize-none cursor-not-allowed"
+          />
+          <Badge className="absolute top-2 right-2 bg-gradient-to-r from-blue-500 to-purple-500">
+            AI Summarized
+          </Badge>
+        </div>
+        <div className="flex items-center justify-between mt-2">
+          <p className="text-xs text-slate-500">
+            ✨ Automatically summarized from your content prompt
+          </p>
+          <p className="text-xs font-medium text-slate-600">
+            {summarizedPrompt.split(/\s+/).filter(w => w.length > 0).length} words
+          </p>
+        </div>
+        
+        {/* Show original prompt in collapsible section */}
+        <details className="mt-3 group">
+          <summary className="text-xs text-blue-600 cursor-pointer hover:text-blue-700 font-medium">
+            View original full prompt
+          </summary>
+          <div className="mt-2 p-3 bg-blue-50 rounded-lg border border-blue-200">
+            <p className="text-xs text-slate-600 leading-relaxed">
+              {content.image_prompt || content.topic}
+            </p>
           </div>
-        </CardContent>
-      </Card>
+        </details>
+      </div>
+
+      {/* Voice Selection */}
+      <div>
+        <label className="block text-sm font-medium text-slate-700 mb-2">
+          Select Voice
+        </label>
+        <select
+          value={selectedVoice}
+          onChange={(e) => setSelectedVoice(e.target.value)}
+          className="w-full p-3 border-2 border-slate-200 rounded-xl focus:border-orange-400 focus:outline-none bg-white"
+          disabled={isSummarizing}
+        >
+          <option value="21m00Tcm4TlvDq8ikWAM">Rachel - Natural, Clear</option>
+          <option value="AZnzlk1XvdvUeBnXmlld">Domi - Strong, Confident</option>
+          <option value="EXAVITQu4vr4xnSDxMaL">Bella - Soft, Warm</option>
+          <option value="ErXwobaYiN019PkySvjV">Antoni - Well-rounded</option>
+          <option value="MF3mGyEYCl7XYWbV9V6O">Elli - Emotional</option>
+          <option value="TxGEqnHWrfWFTfGW9XjX">Josh - Deep, Authoritative</option>
+          <option value="VR6AewLTigWG4xSOukaG">Arnold - Crisp, Professional</option>
+          <option value="pNInz6obpgDQGcFmaJgB">Adam - Narrative Style</option>
+        </select>
+      </div>
+
+      {/* Generate Button */}
+      <Button
+        onClick={() => generateAudio(summarizedPrompt)}
+        disabled={isGeneratingAudio || isSummarizing || !summarizedPrompt}
+        className="w-full h-14 text-lg bg-gradient-to-r from-orange-600 to-pink-600 hover:from-orange-700 hover:to-pink-700"
+      >
+        {isGeneratingAudio ? (
+          <>
+            <Loader2 className="h-5 w-5 mr-2 animate-spin" />
+            Generating Voiceover...
+          </>
+        ) : isSummarizing ? (
+          <>
+            <Loader2 className="h-5 w-5 mr-2 animate-spin" />
+            Preparing Prompt...
+          </>
+        ) : (
+          <>
+            <Volume2 className="h-5 w-5 mr-2" />
+            Generate Voiceover from Summary
+          </>
+        )}
+      </Button>
+
+      {/* Audio Player */}
+      {audioData && audioData.success && (
+        <div className="p-6 bg-gradient-to-r from-orange-50 to-pink-50 rounded-xl border-2 border-orange-200">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <Button
+                onClick={toggleAudioPlayback}
+                size="lg"
+                className="bg-gradient-to-r from-orange-600 to-pink-600 hover:from-orange-700 hover:to-pink-700"
+              >
+                {isPlayingAudio ? (
+                  <>
+                    <Pause className="h-5 w-5 mr-2" />
+                    Pause
+                  </>
+                ) : (
+                  <>
+                    <Play className="h-5 w-5 mr-2" />
+                    Play
+                  </>
+                )}
+              </Button>
+              <div className="text-sm text-slate-600">
+                <p className="font-semibold flex items-center gap-2">
+                  <Volume2 className="h-4 w-4 text-orange-600" />
+                  Audio Ready!
+                </p>
+                <p>Size: {audioData.size_bytes ? (audioData.size_bytes / 1024).toFixed(1) : '0'} KB</p>
+              </div>
+            </div>
+            <Button
+              onClick={downloadAudio}
+              variant="outline"
+              className="border-orange-300 hover:bg-orange-50"
+            >
+              <Download className="h-4 w-4 mr-2" />
+              Download MP3
+            </Button>
+          </div>
+        </div>
+      )}
+    </div>
+  </CardContent>
+</Card>
 
       {/* Captions Preview */}
       <Card className="border-0 shadow-2xl bg-white/80">

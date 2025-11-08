@@ -644,7 +644,145 @@ async def generate_content(
             detail=f"Failed to generate content: {str(e)}",
         )
 
+# Add this to backend/app/api/v1/content.py
 
+# Add this schema at the top with other schemas:
+class PromptSummarizeRequest(BaseModel):
+    prompt: str
+    max_words: int = 50
+
+
+class PromptSummarizeResponse(BaseModel):
+    success: bool
+    summarized_prompt: str
+    original_word_count: int
+    summarized_word_count: int
+    error: Optional[str] = None
+
+
+# Add this endpoint after the other content endpoints:
+@router.post("/summarize-prompt", response_model=PromptSummarizeResponse)
+async def summarize_prompt(
+    request: PromptSummarizeRequest,
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Summarize a long video prompt to a specified word count using Gemini AI.
+    Useful for creating concise voiceover scripts.
+    """
+    try:
+        print(f"[Summarize Prompt] User: {current_user.email}")
+        print(f"[Summarize Prompt] Original prompt length: {len(request.prompt)} chars")
+        print(f"[Summarize Prompt] Target max words: {request.max_words}")
+        
+        # Count original words
+        original_word_count = len(request.prompt.split())
+        
+        # If already short enough, return as-is
+        if original_word_count <= request.max_words:
+            print(f"[Summarize Prompt] Prompt already short enough ({original_word_count} words)")
+            return PromptSummarizeResponse(
+                success=True,
+                summarized_prompt=request.prompt,
+                original_word_count=original_word_count,
+                summarized_word_count=original_word_count
+            )
+        
+        # Check API key
+        if not settings.GEMINI_API_KEY or settings.GEMINI_API_KEY.strip() == "":
+            raise ValueError(
+                "GEMINI_API_KEY is not configured. "
+                "Get a FREE API key from: https://aistudio.google.com/app/apikey"
+            )
+        
+        # Create summarization prompt for Gemini
+        summarization_prompt = f"""Summarize this video prompt into EXACTLY {request.max_words} words or less while keeping the key visual concepts and essence.
+
+Original prompt:
+{request.prompt}
+
+Requirements:
+- Maximum {request.max_words} words
+- Keep the most important visual elements
+- Maintain the core message and mood
+- Use concise, descriptive language
+- Focus on what viewers will see
+
+Return ONLY the summarized prompt, nothing else."""
+
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key={settings.GEMINI_API_KEY}"
+            
+            payload = {
+                "contents": [{
+                    "parts": [{"text": summarization_prompt}]
+                }],
+                "generationConfig": {
+                    "temperature": 0.4,  # Lower for more focused output
+                    "maxOutputTokens": 200,
+                    "topP": 0.8,
+                    "topK": 40
+                }
+            }
+            
+            print(f"[Summarize Prompt] Calling Gemini API...")
+            
+            response = await client.post(url, json=payload)
+            response.raise_for_status()
+            
+            result = response.json()
+            
+            # Extract summarized text
+            candidates = result.get("candidates", [])
+            if not candidates:
+                raise ValueError("No candidates in Gemini response")
+            
+            content_obj = candidates[0].get("content", {})
+            parts = content_obj.get("parts", [])
+            
+            if not parts:
+                raise ValueError("No parts in Gemini response")
+            
+            summarized_prompt = parts[0].get("text", "").strip()
+            
+            if not summarized_prompt:
+                raise ValueError("No text content in Gemini response")
+            
+            # Count summarized words
+            summarized_word_count = len(summarized_prompt.split())
+            
+            print(f"[Summarize Prompt] Success!")
+            print(f"[Summarize Prompt] Original: {original_word_count} words")
+            print(f"[Summarize Prompt] Summarized: {summarized_word_count} words")
+            print(f"[Summarize Prompt] Reduction: {((original_word_count - summarized_word_count) / original_word_count * 100):.1f}%")
+            
+            return PromptSummarizeResponse(
+                success=True,
+                summarized_prompt=summarized_prompt,
+                original_word_count=original_word_count,
+                summarized_word_count=summarized_word_count
+            )
+            
+    except ValueError as e:
+        print(f"[Summarize Prompt] ValueError: {str(e)}")
+        return PromptSummarizeResponse(
+            success=False,
+            summarized_prompt=request.prompt[:200] + "...",  # Fallback
+            original_word_count=len(request.prompt.split()),
+            summarized_word_count=len(request.prompt[:200].split()),
+            error=str(e)
+        )
+    except Exception as e:
+        print(f"[Summarize Prompt] Exception: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return PromptSummarizeResponse(
+            success=False,
+            summarized_prompt=request.prompt[:200] + "...",  # Fallback
+            original_word_count=len(request.prompt.split()),
+            summarized_word_count=len(request.prompt[:200].split()),
+            error=f"Failed to summarize prompt: {str(e)}"
+        )
 @router.post(
     "/create", response_model=ContentResponse, status_code=status.HTTP_201_CREATED
 )
