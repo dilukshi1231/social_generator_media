@@ -13,7 +13,8 @@ import {
   Download,
   Sparkles,
   Maximize2,
-  Minimize2
+  Minimize2,
+  RefreshCw
 } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 
@@ -49,9 +50,8 @@ export default function VideoPlayerWithAudio({ video }: VideoPlayerProps) {
   const [audioData, setAudioData] = useState<string | null>(null);
   const [isAnalyzingVideo, setIsAnalyzingVideo] = useState(false);
   const [isGeneratingAudio, setIsGeneratingAudio] = useState(false);
-  const [isAudioPlaying, setIsAudioPlaying] = useState(false);
+  const [isAudioSynced, setIsAudioSynced] = useState(false);
   const [selectedVoice, setSelectedVoice] = useState('21m00Tcm4TlvDq8ikWAM');
-  const [syncAudioWithVideo, setSyncAudioWithVideo] = useState(true);
 
   // Available voices
   const voices = [
@@ -66,22 +66,26 @@ export default function VideoPlayerWithAudio({ video }: VideoPlayerProps) {
   // Cleanup on unmount
   useEffect(() => {
     return () => {
-      if (videoRef.current) {
-        videoRef.current.pause();
-      }
-      if (audioRef.current) {
-        audioRef.current.pause();
-      }
+      if (videoRef.current) videoRef.current.pause();
+      if (audioRef.current) audioRef.current.pause();
     };
   }, []);
 
-  // Video time update
+  // Video time update handler
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
 
     const handleTimeUpdate = () => {
       setCurrentTime(video.currentTime);
+      
+      // Sync audio with video if enabled
+      if (isAudioSynced && audioRef.current && audioData) {
+        const timeDiff = Math.abs(video.currentTime - audioRef.current.currentTime);
+        if (timeDiff > 0.3) { // Resync if drift > 300ms
+          audioRef.current.currentTime = video.currentTime;
+        }
+      }
     };
 
     const handleLoadedMetadata = () => {
@@ -95,11 +99,13 @@ export default function VideoPlayerWithAudio({ video }: VideoPlayerProps) {
       video.removeEventListener('timeupdate', handleTimeUpdate);
       video.removeEventListener('loadedmetadata', handleLoadedMetadata);
     };
-  }, []);
+  }, [isAudioSynced, audioData]);
 
-  // Analyze video and generate description using AI
-  const analyzeAndDescribeVideo = async () => {
+  // Analyze video and generate narration (combined endpoint)
+  const analyzeAndGenerateNarration = async () => {
     setIsAnalyzingVideo(true);
+    setIsGeneratingAudio(true);
+    
     try {
       const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
       const token = localStorage.getItem('access_token');
@@ -109,125 +115,74 @@ export default function VideoPlayerWithAudio({ video }: VideoPlayerProps) {
       }
 
       toast({
-        title: 'Analyzing video...',
-        description: 'AI is watching and understanding the video content',
+        title: '🎬 Analyzing video...',
+        description: 'AI is watching the video and creating narration',
       });
 
-      const response = await fetch(`${API_URL}/api/v1/content/analyze-video`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          video_url: video.video_url,
-          video_id: video.id,
-          duration: video.duration,
-        }),
-      });
+      // Combined endpoint - analyzes video AND generates audio in one call
+      const response = await fetch(
+        `${API_URL}/api/v1/content/analyze-video-with-narration?video_url=${encodeURIComponent(video.video_url)}&video_id=${video.id}&duration=${video.duration}&voice_id=${selectedVoice}`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+          },
+        }
+      );
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.detail || 'Failed to analyze video');
+        throw new Error(errorData.detail || 'Failed to generate narration');
       }
 
       const data = await response.json();
       
-      if (data.success) {
-        setVideoDescription(data.description);
-        toast({
-          title: 'Video analyzed successfully!',
-          description: 'AI has generated a description of the video',
-        });
-        
-        // Automatically generate audio after analysis
-        await generateAudioFromDescription(data.description);
-      } else {
-        throw new Error(data.error || 'Failed to analyze video');
+      if (!data.success) {
+        throw new Error(data.error || 'Narration generation failed');
       }
-    } catch (error) {
-      console.error('[analyzeVideo] Error:', error);
-      const errorMessage = error instanceof Error ? error.message : 'Failed to analyze video';
+
+      setVideoDescription(data.description);
+      setAudioData(data.audio_data_url);
+      setIsAudioSynced(true);
+
       toast({
-        title: 'Video analysis failed',
+        title: '🎉 Narration ready!',
+        description: `Audio generated (${(data.size_bytes / 1024).toFixed(1)} KB). Play the video to hear it!`,
+      });
+
+    } catch (error) {
+      console.error('[Video Narration] Error:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Failed to generate narration';
+      toast({
+        title: 'Narration failed',
         description: errorMessage,
         variant: 'destructive',
       });
     } finally {
       setIsAnalyzingVideo(false);
-    }
-  };
-
-  // Generate audio from video description
-  const generateAudioFromDescription = async (description: string) => {
-    setIsGeneratingAudio(true);
-    try {
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-      const token = localStorage.getItem('access_token');
-
-      if (!token) {
-        throw new Error('No authentication token found');
-      }
-
-      toast({
-        title: 'Generating voiceover...',
-        description: 'Creating narration from video description',
-      });
-
-      const response = await fetch(`${API_URL}/api/v1/content/generate-audio`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          text: description,
-          voice_id: selectedVoice,
-        }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || 'Failed to generate audio');
-      }
-
-      const data = await response.json();
-      
-      if (data.success) {
-        setAudioData(data.audio_data_url);
-        toast({
-          title: 'Voiceover ready!',
-          description: `Audio generated successfully (${(data.size_bytes / 1024).toFixed(1)} KB)`,
-        });
-      } else {
-        throw new Error(data.error || 'Failed to generate audio');
-      }
-    } catch (error) {
-      console.error('[generateAudio] Error:', error);
-      const errorMessage = error instanceof Error ? error.message : 'Failed to generate audio';
-      toast({
-        title: 'Audio generation failed',
-        description: errorMessage,
-        variant: 'destructive',
-      });
-    } finally {
       setIsGeneratingAudio(false);
     }
   };
 
-  // Play/Pause video
-  const toggleVideo = () => {
+  // Play/Pause video and audio together
+  const toggleVideo = async () => {
     if (!videoRef.current) return;
 
     if (isPlaying) {
       videoRef.current.pause();
-      if (syncAudioWithVideo && audioRef.current && isAudioPlaying) {
+      if (isAudioSynced && audioRef.current) {
         audioRef.current.pause();
       }
     } else {
-      videoRef.current.play();
-      if (syncAudioWithVideo && audioData && audioRef.current) {
-        audioRef.current.play();
+      try {
+        await videoRef.current.play();
+        if (isAudioSynced && audioRef.current && audioData) {
+          // Sync audio time with video before playing
+          audioRef.current.currentTime = videoRef.current.currentTime;
+          await audioRef.current.play();
+        }
+      } catch (err) {
+        console.error('Playback error:', err);
       }
     }
     setIsPlaying(!isPlaying);
@@ -258,14 +213,14 @@ export default function VideoPlayerWithAudio({ video }: VideoPlayerProps) {
     setIsFullscreen(!isFullscreen);
   };
 
-  // Seek video
+  // Seek video and audio
   const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newTime = parseFloat(e.target.value);
     if (videoRef.current) {
       videoRef.current.currentTime = newTime;
       setCurrentTime(newTime);
     }
-    if (syncAudioWithVideo && audioRef.current) {
+    if (isAudioSynced && audioRef.current) {
       audioRef.current.currentTime = newTime;
     }
   };
@@ -283,7 +238,7 @@ export default function VideoPlayerWithAudio({ video }: VideoPlayerProps) {
 
     const link = document.createElement('a');
     link.href = audioData;
-    link.download = `video_description_${video.id}_${Date.now()}.mp3`;
+    link.download = `video_narration_${video.id}_${Date.now()}.mp3`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -296,23 +251,22 @@ export default function VideoPlayerWithAudio({ video }: VideoPlayerProps) {
 
   // Handle video ended
   useEffect(() => {
-    const video = videoRef.current;
-    const audio = audioRef.current;
+    const videoEl = videoRef.current;
+    const audioEl = audioRef.current;
 
-    if (!video) return;
+    if (!videoEl) return;
 
     const handleVideoEnded = () => {
       setIsPlaying(false);
-      if (audio) {
-        audio.pause();
-        audio.currentTime = 0;
-        setIsAudioPlaying(false);
+      if (audioEl && isAudioSynced) {
+        audioEl.pause();
+        audioEl.currentTime = 0;
       }
     };
 
-    video.addEventListener('ended', handleVideoEnded);
-    return () => video.removeEventListener('ended', handleVideoEnded);
-  }, []);
+    videoEl.addEventListener('ended', handleVideoEnded);
+    return () => videoEl.removeEventListener('ended', handleVideoEnded);
+  }, [isAudioSynced]);
 
   return (
     <Card className="overflow-hidden border-2 border-slate-200 hover:border-purple-300 transition-all hover:shadow-xl">
@@ -323,23 +277,11 @@ export default function VideoPlayerWithAudio({ video }: VideoPlayerProps) {
           src={video.video_url}
           className="w-full h-full object-contain"
           poster={video.image}
-          onPlay={() => {
-            setIsPlaying(true);
-            if (syncAudioWithVideo && audioData && audioRef.current) {
-              audioRef.current.play();
-              setIsAudioPlaying(true);
-            }
-          }}
-          onPause={() => {
-            setIsPlaying(false);
-            if (syncAudioWithVideo && audioRef.current) {
-              audioRef.current.pause();
-              setIsAudioPlaying(false);
-            }
-          }}
+          onPlay={() => setIsPlaying(true)}
+          onPause={() => setIsPlaying(false)}
         />
 
-        {/* Play button overlay (when paused) */}
+        {/* Play button overlay */}
         {!isPlaying && (
           <div className="absolute inset-0 flex items-center justify-center bg-black/30">
             <Button
@@ -349,6 +291,14 @@ export default function VideoPlayerWithAudio({ video }: VideoPlayerProps) {
             >
               <Play className="h-10 w-10 ml-1" />
             </Button>
+          </div>
+        )}
+
+        {/* Audio sync indicator */}
+        {isAudioSynced && audioData && isPlaying && (
+          <div className="absolute top-4 right-4 bg-purple-600 text-white px-3 py-1.5 rounded-full text-xs font-bold flex items-center gap-2 shadow-lg animate-pulse">
+            <Volume2 className="h-3 w-3" />
+            AI Narration Playing
           </div>
         )}
 
@@ -387,22 +337,14 @@ export default function VideoPlayerWithAudio({ video }: VideoPlayerProps) {
               </span>
             </div>
             
-            <div className="flex items-center gap-2">
-              {isAudioPlaying && (
-                <span className="text-xs text-purple-300 font-medium flex items-center gap-1">
-                  <Volume2 className="h-3 w-3 animate-pulse" />
-                  AI Narration
-                </span>
-              )}
-              <Button
-                onClick={toggleFullscreen}
-                size="sm"
-                variant="ghost"
-                className="text-white hover:bg-white/20"
-              >
-                {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
-              </Button>
-            </div>
+            <Button
+              onClick={toggleFullscreen}
+              size="sm"
+              variant="ghost"
+              className="text-white hover:bg-white/20"
+            >
+              {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+            </Button>
           </div>
         </div>
       </div>
@@ -418,11 +360,11 @@ export default function VideoPlayerWithAudio({ video }: VideoPlayerProps) {
           </div>
         </div>
 
-        {/* AI Description & Audio section */}
+        {/* AI Narration Section */}
         <div className="space-y-3 pt-3 border-t-2 border-slate-200">
           <div className="flex items-center gap-2 text-sm font-bold text-slate-700">
             <Sparkles className="h-5 w-5 text-purple-600" />
-            AI Video Description & Narration
+            AI Video Narration
           </div>
 
           {/* Description display */}
@@ -434,39 +376,30 @@ export default function VideoPlayerWithAudio({ video }: VideoPlayerProps) {
           )}
 
           {/* Voice selection */}
-          <div>
-            <label className="block text-xs font-medium text-slate-600 mb-2">
-              Select Narrator Voice
-            </label>
-            <select
-              value={selectedVoice}
-              onChange={(e) => setSelectedVoice(e.target.value)}
-              className="w-full p-2.5 border-2 border-slate-200 rounded-lg text-sm focus:border-purple-400 focus:outline-none bg-white"
-              disabled={isAnalyzingVideo || isGeneratingAudio}
-            >
-              {voices.map((voice) => (
-                <option key={voice.id} value={voice.id}>
-                  {voice.name}
-                </option>
-              ))}
-            </select>
-          </div>
+          {!audioData && (
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-2">
+                Select Narrator Voice
+              </label>
+              <select
+                value={selectedVoice}
+                onChange={(e) => setSelectedVoice(e.target.value)}
+                className="w-full p-2.5 border-2 border-slate-200 rounded-lg text-sm focus:border-purple-400 focus:outline-none bg-white"
+                disabled={isAnalyzingVideo || isGeneratingAudio}
+              >
+                {voices.map((voice) => (
+                  <option key={voice.id} value={voice.id}>
+                    {voice.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
 
-          {/* Sync option */}
-          <label className="flex items-center gap-2 text-sm text-slate-600 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={syncAudioWithVideo}
-              onChange={(e) => setSyncAudioWithVideo(e.target.checked)}
-              className="w-4 h-4 text-purple-600 border-slate-300 rounded focus:ring-purple-500"
-            />
-            <span>Sync narration with video playback</span>
-          </label>
-
-          {/* Analyze & Generate button */}
-          {!videoDescription && (
+          {/* Generate button */}
+          {!audioData ? (
             <Button
-              onClick={analyzeAndDescribeVideo}
+              onClick={analyzeAndGenerateNarration}
               disabled={isAnalyzingVideo || isGeneratingAudio}
               className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 h-11"
             >
@@ -483,51 +416,54 @@ export default function VideoPlayerWithAudio({ video }: VideoPlayerProps) {
               ) : (
                 <>
                   <Sparkles className="h-4 w-4 mr-2" />
-                  Analyze & Generate Narration
+                  Generate AI Narration
                 </>
               )}
             </Button>
-          )}
-
-          {/* Regenerate button */}
-          {videoDescription && (
-            <div className="flex gap-2">
-              <Button
-                onClick={analyzeAndDescribeVideo}
-                disabled={isAnalyzingVideo || isGeneratingAudio}
-                variant="outline"
-                className="flex-1 border-purple-300 hover:bg-purple-50"
-              >
-                {isAnalyzingVideo || isGeneratingAudio ? (
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                ) : (
-                  <Sparkles className="h-4 w-4 mr-2" />
-                )}
-                Regenerate
-              </Button>
-              {audioData && (
+          ) : (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between p-3 bg-gradient-to-r from-green-50 to-emerald-50 rounded-lg border-2 border-green-200">
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+                  <span className="text-sm font-semibold text-green-700">
+                    Narration Ready! Play video to hear it.
+                  </span>
+                </div>
                 <Button
                   onClick={downloadAudio}
-                  variant="outline"
-                  className="border-purple-300 hover:bg-purple-50"
+                  variant="ghost"
+                  size="sm"
+                  className="text-green-700 hover:bg-green-100"
                 >
                   <Download className="h-4 w-4" />
                 </Button>
-              )}
+              </div>
+              
+              <Button
+                onClick={() => {
+                  setAudioData(null);
+                  setVideoDescription('');
+                  setIsAudioSynced(false);
+                }}
+                variant="outline"
+                size="sm"
+                className="w-full border-purple-300 hover:bg-purple-50"
+              >
+                <RefreshCw className="h-4 w-4 mr-2" />
+                Generate New Narration
+              </Button>
             </div>
           )}
-
-          {/* Hidden audio element */}
-          {audioData && (
-            <audio
-              ref={audioRef}
-              src={audioData}
-              onPlay={() => setIsAudioPlaying(true)}
-              onPause={() => setIsAudioPlaying(false)}
-              onEnded={() => setIsAudioPlaying(false)}
-            />
-          )}
         </div>
+
+        {/* Hidden audio element */}
+        {audioData && (
+          <audio
+            ref={audioRef}
+            src={audioData}
+            preload="auto"
+          />
+        )}
       </CardContent>
     </Card>
   );

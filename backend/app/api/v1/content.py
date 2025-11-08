@@ -8,7 +8,7 @@ import base64
 import tempfile
 import os
 from pathlib import Path
-
+from app.services.video_audio_service import VideoAudioService
 from app.database import get_db
 from app.models.user import User
 from app.models.content import Content, ContentStatus
@@ -961,4 +961,69 @@ async def generate_image_proxy(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to generate image: {str(e)}",
+        )
+
+@router.post("/analyze-video-with-narration", response_model=dict)
+async def analyze_video_with_narration(
+    video_url: str,
+    video_id: int,
+    duration: float,
+    voice_id: str = "21m00Tcm4TlvDq8ikWAM",
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Complete video analysis with AI narration generation.
+    This endpoint:
+    1. Downloads the video temporarily
+    2. Extracts key frames
+    3. Analyzes frames with Gemini Vision
+    4. Generates audio narration with ElevenLabs
+    5. Returns both description and audio
+    """
+    try:
+        print(f"[Video + Audio] Starting complete analysis for video {video_id}")
+        print(f"[Video + Audio] Video URL: {video_url}")
+        print(f"[Video + Audio] Duration: {duration}s")
+        print(f"[Video + Audio] Voice ID: {voice_id}")
+        
+        service = VideoAudioService()
+        
+        result = await service.analyze_video_and_generate_narration(
+            video_url=video_url,
+            video_id=video_id,
+            duration=duration,
+            voice_id=voice_id
+        )
+        
+        if not result.get("success"):
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=result.get("error", "Failed to analyze video and generate narration")
+            )
+        
+        print(f"[Video + Audio] Complete! Description: {len(result['description'])} chars")
+        print(f"[Video + Audio] Audio: {result['size_bytes']} bytes")
+        
+        return {
+            "success": True,
+            "video_id": video_id,
+            "description": result["description"],
+            "audio_data_url": result["audio_data_url"],
+            "audio_base64": result["audio_base64"],
+            "size_bytes": result["size_bytes"],
+            "voice_id": result["voice_id"],
+            "analysis_details": {
+                "frames_analyzed": result["frames_analyzed"],
+                "duration": result["duration"],
+            }
+        }
+        
+    except Exception as e:
+        print(f"[Video + Audio] Error: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to analyze video and generate narration: {str(e)}"
         )
