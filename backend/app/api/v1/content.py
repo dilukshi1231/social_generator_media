@@ -14,6 +14,7 @@ from app.services.content_generator import ContentGeneratorService
 from pydantic import BaseModel
 # Add these imports at the top of content.py
 from app.services.pexels_service import PexelsService
+from app.services.keyword_extractor import KeywordExtractorService
 
 
 router = APIRouter()
@@ -32,7 +33,7 @@ class VideoSearchResponse(BaseModel):
     total_results: int
     videos: List[dict]
 
-# Add this new endpoint at the end of content.py
+# Update the search-videos endpoint
 @router.post("/search-videos", response_model=VideoSearchResponse)
 async def search_videos(
     request: VideoSearchRequest,
@@ -40,15 +41,26 @@ async def search_videos(
 ):
     """
     Search for videos on Pexels based on the prompt.
+    Automatically extracts 3-4 keywords from detailed prompts.
     """
     print(f"[VIDEO SEARCH] User: {current_user.email}")
-    print(f"[VIDEO SEARCH] Prompt: {request.prompt}")
+    print(f"[VIDEO SEARCH] Original prompt: {request.prompt}")
     print(f"[VIDEO SEARCH] Per page: {request.per_page}")
     
     try:
+        # Step 1: Extract keywords from the prompt
+        keyword_extractor = KeywordExtractorService()
+        search_keywords = await keyword_extractor.extract_keywords(
+            prompt=request.prompt,
+            max_keywords=4  # Extract 3-4 keywords
+        )
+        
+        print(f"[VIDEO SEARCH] Extracted keywords: {search_keywords}")
+        
+        # Step 2: Search Pexels with the extracted keywords
         pexels = PexelsService()
         result = await pexels.search_videos(
-            query=request.prompt,
+            query=search_keywords,  # Use extracted keywords instead of full prompt
             per_page=request.per_page
         )
         
@@ -63,7 +75,7 @@ async def search_videos(
         
         return VideoSearchResponse(
             success=True,
-            query=result["query"],
+            query=search_keywords,  # Return the keywords that were actually used
             total_results=result["total_results"],
             videos=result["videos"]
         )

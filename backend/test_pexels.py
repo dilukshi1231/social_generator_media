@@ -94,7 +94,7 @@ async def test_pexels_api():
                 print(f"   ❌ Exception: {str(e)}")
     
     print("\n" + "="*50)
-    print("✅ Debug test complete!")
+    print("Debug test complete!")
     print("="*50)
 
 
@@ -102,4 +102,4 @@ if __name__ == "__main__":
     print("="*50)
     print("🔧 Pexels API Debug Script")
     print("="*50)
-    asyncio.run(test_pexels_api())
+    asyncio.run(test_pexels_api())  
