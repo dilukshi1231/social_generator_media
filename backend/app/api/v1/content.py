@@ -7,7 +7,7 @@ from datetime import datetime
 from app.database import get_db
 from app.models.user import User
 from app.models.content import Content, ContentStatus
-
+from app.services.elevenlabs_service import ElevenLabsService
 # Note: Posting is handled via posts API; no need to import SocialAccount/Post here
 from app.api.v1.auth import get_current_user
 from app.services.content_generator import ContentGeneratorService
@@ -32,6 +32,23 @@ class VideoSearchResponse(BaseModel):
     query: str
     total_results: int
     videos: List[dict]
+# Add these new schemas with the other schemas in content.py
+class AudioGenerateRequest(BaseModel):
+    text: str
+    voice_id: Optional[str] = "21m00Tcm4TlvDq8ikWAM"  # Default voice
+
+class AudioGenerateResponse(BaseModel):
+    success: bool
+    audio_base64: Optional[str] = None
+    audio_data_url: Optional[str] = None
+    size_bytes: Optional[int] = None
+    voice_id: Optional[str] = None
+    error: Optional[str] = None
+
+class VoicesResponse(BaseModel):
+    success: bool
+    voices: Optional[List[dict]] = None
+    error: Optional[str] = None
 
 # Update the search-videos endpoint
 @router.post("/search-videos", response_model=VideoSearchResponse)
@@ -553,4 +570,141 @@ async def generate_image_proxy(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to generate image: {str(e)}",
+        )
+    
+@router.post("/generate-audio", response_model=AudioGenerateResponse)
+async def generate_audio(
+    request: AudioGenerateRequest,
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Generate audio from text using ElevenLabs.
+    Perfect for creating voiceovers for social media captions.
+    """
+    try:
+        elevenlabs = ElevenLabsService()
+        result = await elevenlabs.generate_audio(
+            text=request.text,
+            voice_id=request.voice_id
+        )
+        
+        if not result.get("success"):
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=result.get("error", "Failed to generate audio")
+            )
+        
+        return AudioGenerateResponse(**result)
+        
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to generate audio: {str(e)}"
+        )
+
+
+@router.post("/generate-audio-for-caption/{content_id}", response_model=AudioGenerateResponse)
+async def generate_audio_for_content_caption(
+    content_id: int,
+    platform: str = "instagram",  # Default platform
+    voice_id: str = "21m00Tcm4TlvDq8ikWAM",
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Generate audio from a specific content's caption.
+    Automatically cleans and processes the caption for audio generation.
+    """
+    # Get content
+    result = await db.execute(
+        select(Content).where(
+            Content.id == content_id,
+            Content.user_id == current_user.id
+        )
+    )
+    content = result.scalar_one_or_none()
+
+    if not content:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Content not found"
+        )
+
+    # Get caption based on platform
+    caption_map = {
+        "facebook": content.facebook_caption,
+        "instagram": content.instagram_caption,
+        "linkedin": content.linkedin_caption,
+        "twitter": content.twitter_caption,
+        "threads": content.threads_caption,
+    }
+
+    caption = caption_map.get(platform.lower(), content.instagram_caption)
+
+    if not caption:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"No caption found for {platform}"
+        )
+
+    try:
+        elevenlabs = ElevenLabsService()
+        result = await elevenlabs.generate_audio_for_caption(
+            caption=caption,
+            voice_id=voice_id
+        )
+        
+        if not result.get("success"):
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=result.get("error", "Failed to generate audio")
+            )
+        
+        return AudioGenerateResponse(**result)
+        
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to generate audio: {str(e)}"
+        )
+
+
+@router.get("/voices", response_model=VoicesResponse)
+async def get_available_voices(
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Get list of available voices from ElevenLabs.
+    """
+    try:
+        elevenlabs = ElevenLabsService()
+        result = await elevenlabs.get_voices()
+        
+        if not result.get("success"):
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=result.get("error", "Failed to fetch voices")
+            )
+        
+        return VoicesResponse(**result)
+        
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch voices: {str(e)}"
         )

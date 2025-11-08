@@ -1,11 +1,9 @@
-'use client';
-
 import { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
-import { Check, X, RefreshCw, Facebook, Instagram, Linkedin, Twitter, Image as ImageIcon, Copy, Sparkles, Send, Video, ExternalLink, Loader2 } from 'lucide-react';
+import { Check, X, RefreshCw, Facebook, Instagram, Linkedin, Twitter, Image as ImageIcon, Copy, Sparkles, Send, Video, ExternalLink, Loader2, Volume2, Play, Pause, Download } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import type { Content } from '@/types';
 import Image from 'next/image';
@@ -41,6 +39,15 @@ interface VideoResult {
   };
 }
 
+interface AudioData {
+  success: boolean;
+  audio_base64?: string;
+  audio_data_url?: string;
+  size_bytes?: number;
+  voice_id?: string;
+  error?: string;
+}
+
 export default function ContentPreview({
   content,
   onApprove,
@@ -54,6 +61,14 @@ export default function ContentPreview({
   const [videos, setVideos] = useState<VideoResult[]>([]);
   const [isLoadingVideos, setIsLoadingVideos] = useState(false);
   const [videoError, setVideoError] = useState<string | null>(null);
+  
+  // Audio states
+  const [audioData, setAudioData] = useState<AudioData | null>(null);
+  const [isGeneratingAudio, setIsGeneratingAudio] = useState(false);
+  const [isPlayingAudio, setIsPlayingAudio] = useState(false);
+  const [audioElement, setAudioElement] = useState<HTMLAudioElement | null>(null);
+  const [selectedVoice, setSelectedVoice] = useState('21m00Tcm4TlvDq8ikWAM');
+  const [selectedPlatformForAudio, setSelectedPlatformForAudio] = useState('instagram');
 
   // Memoized fetchVideos function to prevent infinite loops
   const fetchVideos = useCallback(async (searchQuery: string) => {
@@ -121,7 +136,6 @@ export default function ContentPreview({
 
   // Fetch videos when content topic is available
   useEffect(() => {
-    // Use image_prompt if available (more specific), otherwise use topic
     const searchQuery = content?.image_prompt || content?.topic;
     
     if (searchQuery) {
@@ -132,6 +146,16 @@ export default function ContentPreview({
     }
   }, [content?.topic, content?.image_prompt, fetchVideos]);
 
+  // Cleanup audio element on unmount
+  useEffect(() => {
+    return () => {
+      if (audioElement) {
+        audioElement.pause();
+        audioElement.src = '';
+      }
+    };
+  }, [audioElement]);
+
   const handleApproveAndPublish = async () => {
     if (onApprove) {
       const result = await onApprove();
@@ -140,6 +164,118 @@ export default function ContentPreview({
       }
     }
     setPublishDialogOpen(true);
+  };
+
+  // Generate audio from caption
+  const generateAudio = async (caption: string) => {
+    if (!caption || !caption.trim()) {
+      toast({
+        title: 'Error',
+        description: 'No caption available to generate audio',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setIsGeneratingAudio(true);
+    try {
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+      const token = localStorage.getItem('access_token');
+
+      if (!token) {
+        throw new Error('No authentication token found');
+      }
+
+      const response = await fetch(`${API_URL}/api/v1/content/generate-audio`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          text: caption,
+          voice_id: selectedVoice,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || 'Failed to generate audio');
+      }
+
+      const data: AudioData = await response.json();
+      
+      if (data.success) {
+        setAudioData(data);
+        // Stop any currently playing audio
+        if (audioElement) {
+          audioElement.pause();
+          setIsPlayingAudio(false);
+        }
+        toast({
+          title: 'Success!',
+          description: `Audio generated successfully (${(data.size_bytes! / 1024).toFixed(1)} KB)`,
+        });
+      } else {
+        throw new Error(data.error || 'Failed to generate audio');
+      }
+    } catch (error) {
+      console.error('[generateAudio] Error:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Failed to generate audio';
+      toast({
+        title: 'Audio generation failed',
+        description: errorMessage,
+        variant: 'destructive',
+      });
+    } finally {
+      setIsGeneratingAudio(false);
+    }
+  };
+
+  // Play/Pause audio
+  const toggleAudioPlayback = () => {
+    if (!audioData?.audio_data_url) return;
+
+    if (audioElement) {
+      if (isPlayingAudio) {
+        audioElement.pause();
+        setIsPlayingAudio(false);
+      } else {
+        audioElement.play();
+        setIsPlayingAudio(true);
+      }
+    } else {
+      const audio = new Audio(audioData.audio_data_url);
+      audio.onended = () => setIsPlayingAudio(false);
+      audio.onerror = () => {
+        setIsPlayingAudio(false);
+        toast({
+          title: 'Playback error',
+          description: 'Failed to play audio',
+          variant: 'destructive',
+        });
+      };
+      audio.play();
+      setAudioElement(audio);
+      setIsPlayingAudio(true);
+    }
+  };
+
+  // Download audio
+  const downloadAudio = () => {
+    if (!audioData?.audio_data_url) return;
+
+    const link = document.createElement('a');
+    link.href = audioData.audio_data_url;
+    link.download = `voiceover_${selectedPlatformForAudio}_${Date.now()}.mp3`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    
+    toast({
+      title: 'Download started',
+      description: 'Audio file is being downloaded',
+    });
   };
 
   const platforms = [
@@ -191,6 +327,18 @@ export default function ContentPreview({
       title: 'Copied!',
       description: `${platform} caption copied to clipboard`,
     });
+  };
+
+  // Get current caption for audio generation
+  const getCurrentCaption = () => {
+    const captionMap: Record<string, string | undefined> = {
+      facebook: content.facebook_caption,
+      instagram: content.instagram_caption,
+      linkedin: content.linkedin_caption,
+      twitter: content.twitter_caption,
+      tiktok: content.threads_caption,
+    };
+    return captionMap[selectedPlatformForAudio] || '';
   };
 
   return (
@@ -348,6 +496,140 @@ export default function ContentPreview({
               ))}
             </div>
           )}
+        </CardContent>
+      </Card>
+
+      {/* Audio Generation Section */}
+      <Card className="border-0 shadow-2xl bg-white/80">
+        <CardHeader className="bg-gradient-to-r from-orange-50 via-pink-50 to-purple-50 border-b-2 border-slate-100">
+          <CardTitle className="flex items-center gap-3 text-xl">
+            <div className="p-3 bg-gradient-to-br from-orange-600 to-pink-600 rounded-xl shadow-lg">
+              <Volume2 className="h-6 w-6 text-white" />
+            </div>
+            <span className="bg-gradient-to-r from-orange-700 to-pink-700 bg-clip-text text-transparent font-bold">
+              AI Voiceover Generation
+            </span>
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-6">
+          <div className="space-y-6">
+            {/* Voice and Platform Selection */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  Select Platform Caption
+                </label>
+                <select
+                  value={selectedPlatformForAudio}
+                  onChange={(e) => {
+                    setSelectedPlatformForAudio(e.target.value);
+                    // Reset audio when platform changes
+                    setAudioData(null);
+                    if (audioElement) {
+                      audioElement.pause();
+                      setIsPlayingAudio(false);
+                    }
+                  }}
+                  className="w-full p-3 border-2 border-slate-200 rounded-xl focus:border-orange-400 focus:outline-none bg-white"
+                >
+                  <option value="instagram">Instagram Caption</option>
+                  <option value="facebook">Facebook Caption</option>
+                  <option value="linkedin">LinkedIn Caption</option>
+                  <option value="twitter">Twitter Caption</option>
+                  <option value="tiktok">TikTok Caption</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  Select Voice
+                </label>
+                <select
+                  value={selectedVoice}
+                  onChange={(e) => setSelectedVoice(e.target.value)}
+                  className="w-full p-3 border-2 border-slate-200 rounded-xl focus:border-orange-400 focus:outline-none bg-white"
+                >
+                  <option value="21m00Tcm4TlvDq8ikWAM">Rachel - Natural, Clear</option>
+                  <option value="AZnzlk1XvdvUeBnXmlld">Domi - Strong, Confident</option>
+                  <option value="EXAVITQu4vr4xnSDxMaL">Bella - Soft, Warm</option>
+                  <option value="ErXwobaYiN019PkySvjV">Antoni - Well-rounded</option>
+                  <option value="MF3mGyEYCl7XYWbV9V6O">Elli - Emotional</option>
+                  <option value="TxGEqnHWrfWFTfGW9XjX">Josh - Deep, Authoritative</option>
+                  <option value="VR6AewLTigWG4xSOukaG">Arnold - Crisp, Professional</option>
+                  <option value="pNInz6obpgDQGcFmaJgB">Adam - Narrative Style</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Generate Button */}
+            <Button
+              onClick={() => generateAudio(getCurrentCaption())}
+              disabled={isGeneratingAudio || !getCurrentCaption()}
+              className="w-full h-14 text-lg bg-gradient-to-r from-orange-600 to-pink-600 hover:from-orange-700 hover:to-pink-700"
+            >
+              {isGeneratingAudio ? (
+                <>
+                  <Loader2 className="h-5 w-5 mr-2 animate-spin" />
+                  Generating Voiceover...
+                </>
+              ) : (
+                <>
+                  <Volume2 className="h-5 w-5 mr-2" />
+                  Generate Voiceover
+                </>
+              )}
+            </Button>
+
+            {/* Audio Player */}
+            {audioData && audioData.success && (
+              <div className="p-6 bg-gradient-to-r from-orange-50 to-pink-50 rounded-xl border-2 border-orange-200">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-4">
+                    <Button
+                      onClick={toggleAudioPlayback}
+                      size="lg"
+                      className="bg-gradient-to-r from-orange-600 to-pink-600 hover:from-orange-700 hover:to-pink-700"
+                    >
+                      {isPlayingAudio ? (
+                        <>
+                          <Pause className="h-5 w-5 mr-2" />
+                          Pause
+                        </>
+                      ) : (
+                        <>
+                          <Play className="h-5 w-5 mr-2" />
+                          Play
+                        </>
+                      )}
+                    </Button>
+                    <div className="text-sm text-slate-600">
+                      <p className="font-semibold flex items-center gap-2">
+                        <Volume2 className="h-4 w-4 text-orange-600" />
+                        Audio Ready!
+                      </p>
+                      <p>Size: {audioData.size_bytes ? (audioData.size_bytes / 1024).toFixed(1) : '0'} KB</p>
+                    </div>
+                  </div>
+                  <Button
+                    onClick={downloadAudio}
+                    variant="outline"
+                    className="border-orange-300 hover:bg-orange-50"
+                  >
+                    <Download className="h-4 w-4 mr-2" />
+                    Download MP3
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {/* Caption Preview */}
+            <div className="p-4 bg-slate-50 rounded-xl border-2 border-slate-200">
+              <p className="text-xs font-medium text-slate-500 mb-2">Caption Preview:</p>
+              <p className="text-sm text-slate-700 line-clamp-3">
+                {getCurrentCaption() || 'No caption available'}
+              </p>
+            </div>
+          </div>
         </CardContent>
       </Card>
 

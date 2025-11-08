@@ -2,7 +2,7 @@ from pydantic_settings import BaseSettings
 from typing import List
 from functools import lru_cache
 from pydantic import ConfigDict
-
+from pydantic import Field
 
 class Settings(BaseSettings):
     # Application
@@ -77,7 +77,7 @@ class Settings(BaseSettings):
 
     # Sentry
     SENTRY_DSN: str = ""
-
+    ELEVENLABS_API_KEY: str = "sk_6be242d50c8e387c45c8269b882c4ef6b5767ac5f967111e"
     @property
     def cors_origins_list(self) -> List[str]:
         return [origin.strip() for origin in self.CORS_ORIGINS.split(",")]
