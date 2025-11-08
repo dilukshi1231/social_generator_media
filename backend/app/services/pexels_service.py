@@ -14,7 +14,7 @@ class PexelsService:
         self, 
         query: str, 
         per_page: int = 5,
-        orientation: str = "landscape"
+        orientation: str = "portrait"  # Changed from "landscape" to "portrait"
     ) -> Dict:
         """
         Search for videos on Pexels based on query.

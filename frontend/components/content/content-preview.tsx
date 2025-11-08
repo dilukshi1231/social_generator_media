@@ -9,6 +9,7 @@ import type { Content } from '@/types';
 import Image from 'next/image';
 import PublishDialog from '@/components/content/publish-dialog';
 import VideoPlayerWithAudio from '@/components/content/video-player-with-audio';
+
 // X (Twitter) Icon Component
 const XIcon = ({ className }: { className?: string }) => (
   <svg viewBox="0 0 24 24" fill="currentColor" className={className}>
@@ -94,7 +95,7 @@ export default function ContentPreview({
         },
         body: JSON.stringify({
           prompt: searchQuery,
-          per_page: 5,
+          per_page: 6,  // Increased to 6 for better grid layout
         }),
       });
 
@@ -114,7 +115,7 @@ export default function ContentPreview({
         setVideos(data.videos);
         
         if (data.videos.length === 0) {
-          setVideoError('No videos found for this topic. Try a different search term.');
+          setVideoError('No portrait videos found for this topic. Try a different search term.');
         }
       } else {
         console.error('[fetchVideos] API returned unsuccessful response:', data);
@@ -416,7 +417,7 @@ export default function ContentPreview({
         </CardContent>
       </Card>
 
-      {/* Video Suggestions */}
+      {/* Video Suggestions - Portrait Layout */}
       <Card className="border-0 shadow-2xl bg-white/80">
         <CardHeader className="bg-gradient-to-r from-purple-50 via-pink-50 to-purple-50 border-b-2 border-slate-100">
           <CardTitle className="flex items-center gap-3 text-xl">
@@ -424,7 +425,7 @@ export default function ContentPreview({
               <Video className="h-6 w-6 text-white" />
             </div>
             <span className="bg-gradient-to-r from-purple-700 to-pink-700 bg-clip-text text-transparent font-bold">
-              Suggested Videos from Pexels
+              Suggested Portrait Videos from Pexels
             </span>
           </CardTitle>
         </CardHeader>
@@ -432,7 +433,7 @@ export default function ContentPreview({
           {isLoadingVideos ? (
             <div className="flex items-center justify-center py-12">
               <Loader2 className="h-8 w-8 animate-spin text-purple-600" />
-              <span className="ml-3 text-slate-600">Searching for videos...</span>
+              <span className="ml-3 text-slate-600">Searching for portrait videos...</span>
             </div>
           ) : videoError ? (
             <div className="text-center py-12">
@@ -453,17 +454,17 @@ export default function ContentPreview({
           ) : videos.length === 0 ? (
             <div className="text-center py-12">
               <Video className="h-12 w-12 text-slate-400 mx-auto mb-4" />
-              <p className="text-slate-600 font-medium mb-2">No videos found</p>
+              <p className="text-slate-600 font-medium mb-2">No portrait videos found</p>
               <p className="text-sm text-slate-500">Try a different search term</p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-4">
               {videos.map((video) => (
                 <div
                   key={video.id}
                   className="group relative rounded-xl overflow-hidden border-2 border-slate-200 hover:border-purple-300 transition-all hover:shadow-lg"
                 >
-                  <div className="relative aspect-video bg-slate-100">
+                  <div className="relative aspect-[9/16] bg-slate-100">
                     <Image
                       src={video.image}
                       alt="Video preview"
@@ -472,23 +473,25 @@ export default function ContentPreview({
                       unoptimized
                     />
                     <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                      <Video className="h-12 w-12 text-white" />
+                      <Video className="h-10 w-10 text-white" />
+                    </div>
+                    <div className="absolute bottom-2 right-2 bg-black/70 text-white text-xs px-2 py-1 rounded">
+                      {Math.floor(video.duration)}s
                     </div>
                   </div>
-                  <div className="p-3 bg-white">
-                    <p className="text-xs text-slate-600 mb-2">
-                      Duration: {Math.floor(video.duration)}s | {video.width}x{video.height}
+                  <div className="p-2 bg-white">
+                    <p className="text-xs text-slate-600 mb-1 truncate">
+                      {video.width}x{video.height}
                     </p>
-                    <div className="flex items-center justify-between">
-                      <p className="text-xs text-slate-500">by {video.user.name}</p>
+                    <div className="flex items-center justify-between gap-1">
+                      <p className="text-xs text-slate-500 truncate flex-1">{video.user.name}</p>
                       <Button
                         variant="ghost"
                         size="sm"
                         onClick={() => window.open(video.video_url, '_blank')}
-                        className="h-8 px-2"
+                        className="h-6 px-1.5 shrink-0"
                       >
-                        <ExternalLink className="h-3 w-3 mr-1" />
-                        View
+                        <ExternalLink className="h-3 w-3" />
                       </Button>
                     </div>
                   </div>
