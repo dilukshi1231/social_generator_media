@@ -45,6 +45,7 @@ export interface Content {
   twitter_caption?: string;
   threads_caption?: string;
   image_prompt?: string;
+  image_caption?: string;
   image_url?: string;
   status: ContentStatus;
   created_at: string;

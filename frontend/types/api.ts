@@ -52,6 +52,7 @@ export interface Content {
     pinterest_caption?: string;
     image_url?: string;
     image_prompt?: string;
+    image_caption?: string;
     feedback?: string;
     created_at: string;
     updated_at: string;

@@ -4,6 +4,7 @@ from sqlalchemy.sql import func
 from app.database import Base
 import enum
 
+
 class ContentStatus(str, enum.Enum):
     DRAFT = "draft"
     PENDING_APPROVAL = "pending_approval"
@@ -11,6 +12,7 @@ class ContentStatus(str, enum.Enum):
     REJECTED = "rejected"
     PUBLISHED = "published"
     FAILED = "failed"
+
 
 class Content(Base):
     __tablename__ = "contents"
@@ -31,6 +33,7 @@ class Content(Base):
 
     # Image data
     image_prompt = Column(Text, nullable=True)
+    image_caption = Column(Text, nullable=True)  # Caption for the generated image
     image_url = Column(String, nullable=True)
     image_data = Column(Text, nullable=True)  # Base64 encoded image
 
@@ -52,5 +55,6 @@ class Content(Base):
     user = relationship("User", back_populates="contents", foreign_keys=[user_id])
     approver = relationship("User", foreign_keys=[approved_by])  # Add this line
     posts = relationship("Post", back_populates="content", cascade="all, delete-orphan")
+
     def __repr__(self):
         return f"<Content {self.id} - {self.topic}>"
