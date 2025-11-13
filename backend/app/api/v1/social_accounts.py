@@ -2,13 +2,20 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from typing import List, Optional, Dict
-from datetime import datetime
+from datetime import datetime, timedelta
 from pydantic import BaseModel
+import httpx
 
 from app.database import get_db
 from app.models.user import User
 from app.models.social_account import SocialAccount, PlatformType
 from app.api.v1.auth import get_current_user
+from app.schemas.social_account import (
+    TokenConnectionRequest,
+    TokenConnectionResponse,
+    TokenTestRequest,
+    TokenTestResponse,
+)
 
 
 router = APIRouter()
@@ -47,9 +54,7 @@ class SocialAccountResponse(BaseModel):
         from_attributes = True
 
 
-@router.post(
-    "/", response_model=SocialAccountResponse, status_code=status.HTTP_201_CREATED
-)
+@router.post("/", response_model=SocialAccountResponse, status_code=status.HTTP_201_CREATED)
 async def connect_social_account(
     account_data: SocialAccountCreate,
     current_user: User = Depends(get_current_user),
@@ -125,16 +130,12 @@ async def get_social_account(
 ):
     """Get specific social media account."""
     result = await db.execute(
-        select(SocialAccount).where(
-            SocialAccount.id == account_id, SocialAccount.user_id == current_user.id
-        )
+        select(SocialAccount).where(SocialAccount.id == account_id, SocialAccount.user_id == current_user.id)
     )
     account = result.scalar_one_or_none()
 
     if not account:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Social account not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Social account not found")
 
     return account
 
@@ -148,16 +149,12 @@ async def update_social_account(
 ):
     """Update social media account details."""
     result = await db.execute(
-        select(SocialAccount).where(
-            SocialAccount.id == account_id, SocialAccount.user_id == current_user.id
-        )
+        select(SocialAccount).where(SocialAccount.id == account_id, SocialAccount.user_id == current_user.id)
     )
     account = result.scalar_one_or_none()
 
     if not account:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Social account not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Social account not found")
 
     # Update fields
     if update_data.access_token is not None:
@@ -186,16 +183,12 @@ async def disconnect_social_account(
 ):
     """Disconnect/delete a social media account."""
     result = await db.execute(
-        select(SocialAccount).where(
-            SocialAccount.id == account_id, SocialAccount.user_id == current_user.id
-        )
+        select(SocialAccount).where(SocialAccount.id == account_id, SocialAccount.user_id == current_user.id)
     )
     account = result.scalar_one_or_none()
 
     if not account:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Social account not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Social account not found")
 
     await db.delete(account)
     await db.commit()
@@ -211,16 +204,12 @@ async def refresh_account_token(
 ):
     """Refresh access token for a social media account."""
     result = await db.execute(
-        select(SocialAccount).where(
-            SocialAccount.id == account_id, SocialAccount.user_id == current_user.id
-        )
+        select(SocialAccount).where(SocialAccount.id == account_id, SocialAccount.user_id == current_user.id)
     )
     account = result.scalar_one_or_none()
 
     if not account:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Social account not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Social account not found")
 
     # TODO: Implement platform-specific token refresh logic
     # This would call the respective OAuth provider's token refresh endpoint
@@ -275,16 +264,12 @@ async def verify_account_connection(
     import httpx
 
     result = await db.execute(
-        select(SocialAccount).where(
-            SocialAccount.id == account_id, SocialAccount.user_id == current_user.id
-        )
+        select(SocialAccount).where(SocialAccount.id == account_id, SocialAccount.user_id == current_user.id)
     )
     account = result.scalar_one_or_none()
 
     if not account:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Social account not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Social account not found")
 
     # Verify based on platform
     try:
@@ -339,22 +324,15 @@ async def verify_account_connection(
                     "valid": True,
                     "platform": account.platform,
                     "user_id": user_data.get("data", {}).get("user", {}).get("open_id"),
-                    "display_name": user_data.get("data", {})
-                    .get("user", {})
-                    .get("display_name"),
+                    "display_name": user_data.get("data", {}).get("user", {}).get("display_name"),
                     "message": "Connection is active and valid",
                 }
 
         elif account.platform == PlatformType.INSTAGRAM:
             async with httpx.AsyncClient(timeout=10.0) as client:
                 # Get the Instagram Business Account ID and page token from platform_data
-                ig_account_id = account.platform_data.get(
-                    "instagram_business_account_id"
-                )
-                page_token = (
-                    account.platform_data.get("facebook_page_token")
-                    or account.access_token
-                )
+                ig_account_id = account.platform_data.get("instagram_business_account_id")
+                page_token = account.platform_data.get("facebook_page_token") or account.access_token
 
                 if not ig_account_id:
                     return {
@@ -386,12 +364,8 @@ async def verify_account_connection(
         elif account.platform == PlatformType.FACEBOOK:
             async with httpx.AsyncClient(timeout=10.0) as client:
                 # Get the Facebook Page ID and page token from platform_data
-                page_id = (
-                    account.platform_data.get("page_id") or account.platform_user_id
-                )
-                page_token = (
-                    account.platform_data.get("page_token") or account.access_token
-                )
+                page_id = account.platform_data.get("page_id") or account.platform_user_id
+                page_token = account.platform_data.get("page_token") or account.access_token
 
                 if not page_id:
                     return {
@@ -445,4 +419,421 @@ async def verify_account_connection(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error verifying connection: {str(e)}",
+        )
+
+
+@router.post("/facebook/pages")
+async def get_facebook_pages(
+    data: Dict,
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Fetch all Facebook Pages the user manages with their user access token.
+
+    Returns list of pages with their IDs, names, and page access tokens.
+    """
+    try:
+        user_access_token = data.get("access_token")
+        if not user_access_token:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Access token is required",
+            )
+
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            # Fetch user's pages with page access tokens and Instagram accounts
+            response = await client.get(
+                "https://graph.facebook.com/v18.0/me/accounts",
+                params={
+                    "fields": "id,name,access_token,category,instagram_business_account{id,username,name}",
+                    "access_token": user_access_token,
+                },
+            )
+            response.raise_for_status()
+            data = response.json()
+
+            pages = data.get("data", [])
+
+            if not pages:
+                return {
+                    "success": False,
+                    "message": "No Facebook Pages found. Make sure you have admin access to at least one page.",
+                    "pages": [],
+                }
+
+            # Format pages for frontend
+            formatted_pages = []
+            for page in pages:
+                page_info = {
+                    "page_id": page.get("id"),
+                    "page_name": page.get("name"),
+                    "category": page.get("category"),
+                    "page_access_token": page.get("access_token"),
+                    "has_instagram": False,
+                }
+
+                # Check for Instagram Business Account
+                ig_account = page.get("instagram_business_account")
+                if ig_account:
+                    page_info["has_instagram"] = True
+                    page_info["instagram_account_id"] = ig_account.get("id")
+                    page_info["instagram_username"] = ig_account.get("username")
+                    page_info["instagram_name"] = ig_account.get("name")
+
+                formatted_pages.append(page_info)
+
+            return {
+                "success": True,
+                "message": f"Found {len(pages)} page(s)",
+                "pages": formatted_pages,
+            }
+
+    except httpx.HTTPStatusError as e:
+        error_data = {}
+        try:
+            error_data = e.response.json()
+        except:
+            pass
+
+        error_message = error_data.get("error", {}).get("message", str(e))
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Failed to fetch pages: {error_message}",
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error fetching pages: {str(e)}",
+        )
+
+
+@router.post("/token/test", response_model=TokenTestResponse)
+async def test_token_connection(
+    request: TokenTestRequest,
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Test a Facebook/Instagram access token before connecting.
+
+    This endpoint validates the token and retrieves account information
+    without saving anything to the database.
+    """
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            if request.platform == PlatformType.FACEBOOK:
+                # Test Facebook Page token
+                if not request.page_id:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail="Page ID is required for Facebook",
+                    )
+
+                # Get page info and token debug info
+                response = await client.get(
+                    f"https://graph.facebook.com/v18.0/{request.page_id}",
+                    params={
+                        "fields": "id,name,category,access_token",
+                        "access_token": request.access_token,
+                    },
+                )
+                response.raise_for_status()
+                page_data = response.json()
+
+                # Get token expiration info
+                debug_response = await client.get(
+                    "https://graph.facebook.com/v18.0/debug_token",
+                    params={
+                        "input_token": request.access_token,
+                        "access_token": request.access_token,
+                    },
+                )
+                debug_data = debug_response.json()
+                token_info = debug_data.get("data", {})
+
+                # Calculate expiration
+                expires_at = token_info.get("expires_at", 0)
+                expires_in_days = None
+                if expires_at and expires_at > 0:
+                    expires_in_days = max(0, (expires_at - datetime.now().timestamp()) // 86400)
+
+                return TokenTestResponse(
+                    valid=True,
+                    message=f"Successfully connected to page: {page_data.get('name')}",
+                    data={
+                        "page_id": page_data.get("id"),
+                        "page_name": page_data.get("name"),
+                        "category": page_data.get("category"),
+                    },
+                    expires_in_days=int(expires_in_days) if expires_in_days else None,
+                    scopes=token_info.get("scopes", []),
+                )
+
+            elif request.platform == PlatformType.INSTAGRAM:
+                # Test Instagram Business Account token
+                if not request.instagram_business_account_id:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail="Instagram Business Account ID is required",
+                    )
+
+                # Get Instagram account info
+                response = await client.get(
+                    f"https://graph.facebook.com/v18.0/{request.instagram_business_account_id}",
+                    params={
+                        "fields": "id,username,name,profile_picture_url",
+                        "access_token": request.access_token,
+                    },
+                )
+                response.raise_for_status()
+                ig_data = response.json()
+
+                # Get token expiration info
+                debug_response = await client.get(
+                    "https://graph.facebook.com/v18.0/debug_token",
+                    params={
+                        "input_token": request.access_token,
+                        "access_token": request.access_token,
+                    },
+                )
+                debug_data = debug_response.json()
+                token_info = debug_data.get("data", {})
+
+                # Calculate expiration
+                expires_at = token_info.get("expires_at", 0)
+                expires_in_days = None
+                if expires_at and expires_at > 0:
+                    expires_in_days = max(0, (expires_at - datetime.now().timestamp()) // 86400)
+
+                return TokenTestResponse(
+                    valid=True,
+                    message=f"Successfully connected to Instagram: @{ig_data.get('username')}",
+                    data={
+                        "account_id": ig_data.get("id"),
+                        "username": ig_data.get("username"),
+                        "name": ig_data.get("name"),
+                    },
+                    expires_in_days=int(expires_in_days) if expires_in_days else None,
+                    scopes=token_info.get("scopes", []),
+                )
+
+            else:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Token connection not supported for {request.platform}",
+                )
+
+    except httpx.HTTPStatusError as e:
+        error_data = {}
+        try:
+            error_data = e.response.json()
+        except:
+            pass
+
+        error_message = error_data.get("error", {}).get("message", str(e))
+        return TokenTestResponse(
+            valid=False,
+            message=f"Token validation failed: {error_message}",
+            data=error_data,
+        )
+    except Exception as e:
+        return TokenTestResponse(
+            valid=False,
+            message=f"Connection test failed: {str(e)}",
+        )
+
+
+@router.post("/token/connect", response_model=TokenConnectionResponse)
+async def connect_with_token(
+    request: TokenConnectionRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Connect a Facebook or Instagram account using an access token.
+
+    This endpoint is specifically for Facebook and Instagram which use
+    long-lived access tokens instead of OAuth flow.
+    """
+    # Validate platform
+    if request.platform not in [PlatformType.FACEBOOK, PlatformType.INSTAGRAM]:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Token connection is only supported for Facebook and Instagram",
+        )
+
+    try:
+        # Check if account already exists
+        result = await db.execute(
+            select(SocialAccount).where(
+                SocialAccount.user_id == current_user.id,
+                SocialAccount.platform == request.platform,
+            )
+        )
+        existing_account = result.scalar_one_or_none()
+
+        if existing_account:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"{request.platform} account already connected. Disconnect it first or update the token.",
+            )
+
+        # Verify token and get account details
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            if request.platform == PlatformType.FACEBOOK:
+                if not request.page_id:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail="Page ID is required for Facebook",
+                    )
+
+                # Get page info
+                response = await client.get(
+                    f"https://graph.facebook.com/v18.0/{request.page_id}",
+                    params={
+                        "fields": "id,name,category",
+                        "access_token": request.access_token,
+                    },
+                )
+                response.raise_for_status()
+                page_data = response.json()
+
+                # Get token expiration info
+                debug_response = await client.get(
+                    "https://graph.facebook.com/v18.0/debug_token",
+                    params={
+                        "input_token": request.access_token,
+                        "access_token": request.access_token,
+                    },
+                )
+                debug_data = debug_response.json()
+                token_info = debug_data.get("data", {})
+
+                expires_at = token_info.get("expires_at", 0)
+                expires_in_days = None
+                token_expires_at = None
+                if expires_at and expires_at > 0:
+                    token_expires_at = datetime.fromtimestamp(expires_at)
+                    expires_in_days = max(0, int((expires_at - datetime.now().timestamp()) // 86400))
+
+                # Create social account
+                new_account = SocialAccount(
+                    user_id=current_user.id,
+                    platform=PlatformType.FACEBOOK,
+                    platform_user_id=page_data.get("id"),
+                    username=None,
+                    display_name=page_data.get("name"),
+                    access_token=request.access_token,
+                    token_expires_at=token_expires_at,
+                    platform_data={
+                        "page_id": page_data.get("id"),
+                        "page_name": page_data.get("name"),
+                        "category": page_data.get("category"),
+                        "scopes": token_info.get("scopes", []),
+                    },
+                    is_active=True,
+                    is_connected=True,
+                )
+
+                db.add(new_account)
+                await db.commit()
+                await db.refresh(new_account)
+
+                return TokenConnectionResponse(
+                    success=True,
+                    message=f"Successfully connected Facebook page: {page_data.get('name')}",
+                    account_id=new_account.id,
+                    platform=PlatformType.FACEBOOK,
+                    display_name=page_data.get("name"),
+                    platform_user_id=page_data.get("id"),
+                    expires_in_days=expires_in_days,
+                )
+
+            elif request.platform == PlatformType.INSTAGRAM:
+                if not request.instagram_business_account_id:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail="Instagram Business Account ID is required",
+                    )
+
+                # Get Instagram account info
+                response = await client.get(
+                    f"https://graph.facebook.com/v18.0/{request.instagram_business_account_id}",
+                    params={
+                        "fields": "id,username,name",
+                        "access_token": request.access_token,
+                    },
+                )
+                response.raise_for_status()
+                ig_data = response.json()
+
+                # Get token expiration info
+                debug_response = await client.get(
+                    "https://graph.facebook.com/v18.0/debug_token",
+                    params={
+                        "input_token": request.access_token,
+                        "access_token": request.access_token,
+                    },
+                )
+                debug_data = debug_response.json()
+                token_info = debug_data.get("data", {})
+
+                expires_at = token_info.get("expires_at", 0)
+                expires_in_days = None
+                token_expires_at = None
+                if expires_at and expires_at > 0:
+                    token_expires_at = datetime.fromtimestamp(expires_at)
+                    expires_in_days = max(0, int((expires_at - datetime.now().timestamp()) // 86400))
+
+                # Create social account
+                new_account = SocialAccount(
+                    user_id=current_user.id,
+                    platform=PlatformType.INSTAGRAM,
+                    platform_user_id=ig_data.get("id"),
+                    username=ig_data.get("username"),
+                    display_name=ig_data.get("name"),
+                    access_token=request.access_token,
+                    token_expires_at=token_expires_at,
+                    platform_data={
+                        "instagram_business_account_id": ig_data.get("id"),
+                        "username": ig_data.get("username"),
+                        "name": ig_data.get("name"),
+                        "scopes": token_info.get("scopes", []),
+                    },
+                    is_active=True,
+                    is_connected=True,
+                )
+
+                db.add(new_account)
+                await db.commit()
+                await db.refresh(new_account)
+
+                return TokenConnectionResponse(
+                    success=True,
+                    message=f"Successfully connected Instagram: @{ig_data.get('username')}",
+                    account_id=new_account.id,
+                    platform=PlatformType.INSTAGRAM,
+                    username=ig_data.get("username"),
+                    display_name=ig_data.get("name"),
+                    platform_user_id=ig_data.get("id"),
+                    expires_in_days=expires_in_days,
+                )
+
+    except httpx.HTTPStatusError as e:
+        error_data = {}
+        try:
+            error_data = e.response.json()
+        except:
+            pass
+
+        error_message = error_data.get("error", {}).get("message", str(e))
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Failed to connect account: {error_message}",
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error connecting account: {str(e)}",
         )

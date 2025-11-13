@@ -9,6 +9,7 @@ import { socialAccountsAPI, oauthAPI } from '@/lib/api';
 import { useToast } from '@/components/ui/use-toast';
 import { Facebook, Instagram, Linkedin, Twitter, CheckCircle, AlertCircle, Trash2, RefreshCw } from 'lucide-react';
 import type { SocialAccount, PlatformType } from '@/types';
+import TokenConnectDialog from '@/components/social-accounts/token-connect-dialog';
 
 // X (Twitter) Icon Component
 const XIcon = ({ className }: { className?: string }) => (
@@ -34,6 +35,8 @@ export default function SocialAccountsPage() {
   const [accounts, setAccounts] = useState<SocialAccount[]>([]);
   const [availablePlatforms, setAvailablePlatforms] = useState<Platform[]>([]);
   const [verifyingAccounts, setVerifyingAccounts] = useState<Set<number>>(new Set());
+  const [tokenDialogOpen, setTokenDialogOpen] = useState(false);
+  const [tokenDialogPlatform, setTokenDialogPlatform] = useState<'facebook' | 'instagram'>('facebook');
 
   useEffect(() => {
     fetchAccounts();
@@ -251,7 +254,15 @@ export default function SocialAccountsPage() {
                       className="w-full mt-4"
                       onClick={async () => {
                         if (connected) return;
-                        // Use OAuth for all platforms
+
+                        // Use token dialog for Facebook and Instagram
+                        if (platform.value === 'facebook' || platform.value === 'instagram') {
+                          setTokenDialogPlatform(platform.value);
+                          setTokenDialogOpen(true);
+                          return;
+                        }
+
+                        // Use OAuth for other platforms
                         try {
                           const { authorize_url } = await oauthAPI.getAuthorizeUrl(platform.value);
                           window.location.href = authorize_url;
@@ -358,6 +369,16 @@ export default function SocialAccountsPage() {
           </CardContent>
         </Card>
       )}
+
+      {/* Token Connection Dialog */}
+      <TokenConnectDialog
+        open={tokenDialogOpen}
+        onOpenChange={setTokenDialogOpen}
+        platform={tokenDialogPlatform}
+        onSuccess={() => {
+          fetchAccounts();
+        }}
+      />
     </div>
   );
 }

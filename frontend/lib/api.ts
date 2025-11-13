@@ -174,6 +174,24 @@ export const socialAccountsAPI = {
     platform_data?: Record<string, unknown>;
   }) => api.post('/api/v1/social-accounts/', data),
 
+  getFacebookPages: (data: {
+    access_token: string;
+  }) => api.post('/api/v1/social-accounts/facebook/pages', data),
+
+  connectWithToken: (data: {
+    platform: 'facebook' | 'instagram';
+    access_token: string;
+    page_id?: string;
+    instagram_business_account_id?: string;
+  }) => api.post('/api/v1/social-accounts/token/connect', data),
+
+  testToken: (data: {
+    platform: 'facebook' | 'instagram';
+    access_token: string;
+    page_id?: string;
+    instagram_business_account_id?: string;
+  }) => api.post('/api/v1/social-accounts/token/test', data),
+
   list: (params?: { platform?: string; active_only?: boolean }) =>
     api.get('/api/v1/social-accounts/', { params }),
 
