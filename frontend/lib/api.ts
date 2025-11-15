@@ -129,7 +129,11 @@ export const contentAPI = {
     image_caption?: string;
     image_url?: string;
     auto_approve?: boolean;
-  }) => api.post('/api/v1/content/create', data),
+  }) => {
+    console.log('[API] contentAPI.create called with data:', data);
+    console.log('[API] Data keys:', Object.keys(data));
+    return api.post('/api/v1/content/create', data);
+  },
 
   list: (params?: { skip?: number; limit?: number; status_filter?: string }) =>
     api.get('/api/v1/content/', { params }),

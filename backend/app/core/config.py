@@ -2,7 +2,7 @@ from pydantic_settings import BaseSettings
 from typing import List
 from functools import lru_cache
 from pydantic import ConfigDict
-
+from pydantic import Field
 
 class Settings(BaseSettings):
     # Application
@@ -37,21 +37,22 @@ class Settings(BaseSettings):
     INSTAGRAM_REDIRECT_URI: str = ""
     TWITTER_REDIRECT_URI: str = ""
     FRONTEND_URL: str = ""
-    BACKEND_URL: str = (
-        "http://localhost:8000"  # Base URL for backend (for OAuth callbacks)
-    )
-    LINKEDIN_REDIRECT_URI: str = ""  # Optional explicit LinkedIn redirect URI
+    BACKEND_URL: str = "http://localhost:8000"
+    LINKEDIN_REDIRECT_URI: str = ""
 
     # AI Services
     OPENAI_API_KEY: str = ""
     ANTHROPIC_API_KEY: str = ""
     REPLICATE_API_TOKEN: str = ""
     GEMINI_API_KEY: str = ""
-    GOOGLE_API_KEY: str = ""  # ADD THIS (alias for GEMINI)
+    GOOGLE_API_KEY: str = ""
 
     # Cloudflare Worker for Image Generation
     CLOUDEFARE_WORKER_URL: str = ""
     CLOUDEFARE_WORKER_AUTH_TOKEN: str = ""
+
+    # Pexels API for Video Search
+    PEXELS_API_KEY: str = ""  # ADD THIS LINE
 
     # Social Media
     TWITTER_API_KEY: str = ""
@@ -81,7 +82,7 @@ class Settings(BaseSettings):
 
     # Sentry
     SENTRY_DSN: str = ""
-
+    ELEVENLABS_API_KEY: str = ""
     @property
     def cors_origins_list(self) -> List[str]:
         return [origin.strip() for origin in self.CORS_ORIGINS.split(",")]
@@ -90,7 +91,7 @@ class Settings(BaseSettings):
         {
             "env_file": ".env",
             "case_sensitive": True,
-            "extra": "ignore",  # ADD THIS to ignore extra fields
+            "extra": "ignore",
         }
     )
 

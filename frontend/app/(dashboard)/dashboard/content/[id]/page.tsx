@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { useToast } from '@/components/ui/use-toast';
-import { X, Maximize2, Send, Facebook, Instagram, Linkedin, Twitter, Image as ImageIcon } from 'lucide-react';
+import { X, Maximize2, Send, Facebook, Instagram, Linkedin, Twitter, Image as ImageIcon, Video, Volume2 } from 'lucide-react';
 import PublishDialog from '@/components/content/publish-dialog';
 import type { Content } from '@/types';
 
@@ -21,11 +21,27 @@ export default function DashboardContentDetailPage() {
     const [isImageModalOpen, setIsImageModalOpen] = useState(false);
     const [publishOpen, setPublishOpen] = useState(false);
 
+    // Video player helpers: none needed, render responsive video element below
+
     const fetchContent = useCallback(async (id: string) => {
         try {
             setIsLoading(true);
             const res = await contentAPI.get(parseInt(id, 10));
             setContent(res.data);
+            // Log loaded content for debugging
+            console.log('[ContentDetail] Loaded content:', res.data);
+            // Log resolved absolute media URLs (use local API_URL to avoid depending on component scope)
+            const API_URL_LOCAL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+            const makeAbsLocal = (url?: string | null) => {
+                if (!url) return undefined;
+                if (url.startsWith('http://') || url.startsWith('https://')) return url;
+                return `${API_URL_LOCAL}${url.startsWith('/') ? url : '/' + url}`;
+            };
+            console.log('[ContentDetail] Resolved media URLs:', {
+                imageSrc: makeAbsLocal(res.data.image_url || undefined),
+                videoSrc: makeAbsLocal(res.data.video_url || undefined),
+                audioSrc: makeAbsLocal(res.data.audio_url || undefined),
+            });
         } catch {
             toast({ title: 'Error', description: 'Failed to load content', variant: 'destructive' });
             router.push('/dashboard/content');
@@ -41,8 +57,24 @@ export default function DashboardContentDetailPage() {
         fetchContent(idStr);
     }, [params, fetchContent]);
 
+    // Hooks that must run on every render
+    const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+    const makeAbsolute = (url?: string | null) => {
+        if (!url) return undefined;
+        if (url.startsWith('http://') || url.startsWith('https://')) return url;
+        // Ensure leading slash
+        return `${API_URL}${url.startsWith('/') ? url : '/' + url}`;
+    };
+
     if (isLoading) return <div className="text-center py-16">Loading...</div>;
     if (!content) return <div className="text-center py-16">Not found</div>;
+
+    const imageSrc = makeAbsolute(content.image_url || undefined);
+    const videoSrc = makeAbsolute(content.video_url || undefined);
+    const audioSrc = makeAbsolute(content.audio_url || undefined);
+
+
+
 
     const platformIcons = () => (
         <div className="flex items-center gap-2">
@@ -65,10 +97,10 @@ export default function DashboardContentDetailPage() {
                         {content.topic}
                         <Badge className="capitalize">{content.status.replace('_', ' ')}</Badge>
                     </h1>
-                    <p className="text-gray-600 mt-1 flex items-center gap-3">
+                    <div className="text-gray-600 mt-1 flex items-center gap-3">
                         <span>Created {new Date(content.created_at).toLocaleDateString()}</span>
                         {platformIcons()}
-                    </p>
+                    </div>
                 </div>
                 <div className="flex gap-2">
                     {content.status === 'approved' && (
@@ -97,7 +129,7 @@ export default function DashboardContentDetailPage() {
                             >
                                 {/* eslint-disable-next-line @next/next/no-img-element */}
                                 <img
-                                    src={content.image_url}
+                                    src={imageSrc}
                                     alt={content.topic}
                                     className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
                                 />
@@ -125,6 +157,73 @@ export default function DashboardContentDetailPage() {
                     </CardContent>
                 </Card>
 
+                {/* Video Card */}
+                <Card className="border border-slate-200/60 shadow-sm bg-white overflow-hidden">
+                    <CardHeader className="pb-2">
+                        <CardTitle className="flex items-center gap-2">
+                            <Video className="h-5 w-5" />
+                            Generated Video
+                        </CardTitle>
+                        <CardDescription>
+                            {content.video_url ? 'Merged video with background' : 'No video available'}
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        {content.video_url ? (
+                            <div className="w-full rounded-lg overflow-hidden bg-slate-100 flex items-center justify-center">
+                                <video
+                                    key={videoSrc}
+                                    src={videoSrc}
+                                    poster={imageSrc}
+                                    controls
+                                    className="w-full h-auto max-h-[70vh] bg-black"
+                                    preload="metadata"
+                                    playsInline
+                                    crossOrigin="anonymous"
+                                    onError={(e) => console.error('[ContentDetail] Video load error', e)}
+                                    onLoadedMetadata={(e) => console.log('[ContentDetail] Video metadata', { width: (e.target as HTMLVideoElement).videoWidth, height: (e.target as HTMLVideoElement).videoHeight })}
+                                >
+                                    Your browser does not support the video tag.
+                                </video>
+                            </div>
+                        ) : (
+                            <div className="w-full aspect-video bg-slate-50 border border-slate-200 rounded-lg flex items-center justify-center">
+                                <div className="flex items-center gap-2 text-slate-500">
+                                    <Video className="h-5 w-5" /> No video generated
+                                </div>
+                            </div>
+                        )}
+                    </CardContent>
+                </Card>
+            </div>
+
+            {/* Audio Section */}
+            {content.audio_url && (
+                <Card className="border border-slate-200/60 shadow-sm bg-white">
+                    <CardHeader>
+                        <CardTitle className="flex items-center gap-2">
+                            <Volume2 className="h-5 w-5" />
+                            Generated Audio
+                        </CardTitle>
+                        <CardDescription>AI-generated voiceover or narration</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <div className="flex items-center gap-4 p-4 bg-purple-50 rounded-lg border border-purple-100">
+                            <Volume2 className="h-6 w-6 text-purple-600" />
+                            <audio
+                                src={audioSrc}
+                                controls
+                                className="flex-1"
+                                preload="metadata"
+                            >
+                                Your browser does not support the audio tag.
+                            </audio>
+                        </div>
+                    </CardContent>
+                </Card>
+            )}
+
+            <div className="grid gap-6 lg:grid-cols-1">
                 {/* Captions Card */}
                 <Card className="border border-slate-200/60 shadow-sm bg-white">
                     <CardHeader>
@@ -167,7 +266,7 @@ export default function DashboardContentDetailPage() {
                         {content.image_url ? (
                             // eslint-disable-next-line @next/next/no-img-element
                             <img
-                                src={content.image_url}
+                                src={imageSrc}
                                 alt={content.topic}
                                 className="max-w-full max-h-full object-contain rounded-lg shadow-2xl"
                             />

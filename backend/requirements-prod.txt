@@ -101,3 +101,4 @@ Flask==3.1.1
 httplib2==0.31.0
 packaging==25.0
 colorama==0.4.6
+edge-tts

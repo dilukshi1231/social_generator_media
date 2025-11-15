@@ -3,6 +3,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from contextlib import asynccontextmanager
 from pathlib import Path
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request
+import time
 
 from app.core.config import settings
 from app.database import create_tables
@@ -33,6 +36,16 @@ async def lifespan(app: FastAPI):
     upload_dir.mkdir(parents=True, exist_ok=True)
     logger.info(f"Uploads directory ready: {upload_dir.absolute()}")
 
+    # Create videos directory
+    videos_dir = Path("uploads/videos")
+    videos_dir.mkdir(parents=True, exist_ok=True)
+    logger.info(f"Videos directory ready: {videos_dir.absolute()}")
+
+    # Create audio directory
+    audio_dir = Path("uploads/audio")
+    audio_dir.mkdir(parents=True, exist_ok=True)
+    logger.info(f"Audio directory ready: {audio_dir.absolute()}")
+
     yield
 
     # Shutdown
@@ -58,6 +71,53 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+# Request logging middleware
+class RequestLoggingMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        print(f"\n{'='*80}")
+        print(f"[REQUEST] {request.method} {request.url.path}")
+        print(f"[REQUEST] Headers: {dict(request.headers)}")
+
+        # Try to get body for POST requests
+        if request.method == "POST":
+            body = await request.body()
+            print(f"[REQUEST] Body length: {len(body)} bytes")
+            if len(body) < 5000:  # Only print small bodies
+                print(f"[REQUEST] Body preview: {body[:500]}")
+
+        start_time = time.time()
+        response = await call_next(request)
+        process_time = time.time() - start_time
+
+        print(f"[RESPONSE] Status: {response.status_code}")
+        print(f"[RESPONSE] Time: {process_time:.3f}s")
+
+        # Try to read response body for errors
+        if response.status_code >= 400:
+            # Get response body
+            response_body = b""
+            async for chunk in response.body_iterator:
+                response_body += chunk
+            print(f"[RESPONSE] Error body: {response_body.decode()}")
+
+            # Re-create response with same body
+            from starlette.responses import Response
+
+            response = Response(
+                content=response_body,
+                status_code=response.status_code,
+                headers=dict(response.headers),
+                media_type=response.media_type,
+            )
+
+        print(f"{'='*80}\n")
+
+        return response
+
+
+app.add_middleware(RequestLoggingMiddleware)
 
 
 # Health check endpoint

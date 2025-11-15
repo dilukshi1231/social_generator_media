@@ -1,4 +1,14 @@
-from sqlalchemy import Column, Integer, String, Text, Boolean, DateTime, ForeignKey, Enum as SQLEnum, JSON
+from sqlalchemy import (
+    Column,
+    Integer,
+    String,
+    Text,
+    Boolean,
+    DateTime,
+    ForeignKey,
+    Enum as SQLEnum,
+    JSON,
+)
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.database import Base
@@ -18,7 +28,9 @@ class Content(Base):
     __tablename__ = "contents"
 
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    user_id = Column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
 
     # Content details
     topic = Column(String, nullable=False)
@@ -36,6 +48,10 @@ class Content(Base):
     image_caption = Column(Text, nullable=True)  # Caption for the generated image
     image_url = Column(String, nullable=True)
     image_data = Column(Text, nullable=True)  # Base64 encoded image
+
+    # Video and audio URLs (only URLs, not data)
+    video_url = Column(String, nullable=True)
+    audio_url = Column(String, nullable=True)
 
     # Status and approval
     status = Column(SQLEnum(ContentStatus), default=ContentStatus.DRAFT)

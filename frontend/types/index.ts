@@ -47,6 +47,8 @@ export interface Content {
   image_prompt?: string;
   image_caption?: string;
   image_url?: string;
+  video_url?: string | null;
+  audio_url?: string | null;
   status: ContentStatus;
   created_at: string;
   approved_at?: string;
