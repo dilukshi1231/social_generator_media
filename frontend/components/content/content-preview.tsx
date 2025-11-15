@@ -1,3 +1,4 @@
+// frontend/components/content/content-preview.tsx
 import { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -8,7 +9,6 @@ import { useToast } from '@/components/ui/use-toast';
 import type { Content } from '@/types';
 import Image from 'next/image';
 import PublishDialog from '@/components/content/publish-dialog';
-// Video player component not used here; import removed to fix unused import warnings
 
 // X (Twitter) Icon Component
 const XIcon = ({ className }: { className?: string }) => (
@@ -70,12 +70,22 @@ export default function ContentPreview({
   const [isLoadingVideos, setIsLoadingVideos] = useState(false);
   const [videoError, setVideoError] = useState<string | null>(null);
 
+  // Video merge states
+  const [selectedVideos, setSelectedVideos] = useState<VideoResult[]>([]);
+  const [isMergingVideos, setIsMergingVideos] = useState(false);
+  const [mergedVideoUrl, setMergedVideoUrl] = useState<string | null>(null);
+  const [mergeError, setMergeError] = useState<string | null>(null);
+
   // Audio states
   const [audioData, setAudioData] = useState<AudioData | null>(null);
   const [isGeneratingAudio, setIsGeneratingAudio] = useState(false);
   const [isPlayingAudio, setIsPlayingAudio] = useState(false);
   const [audioElement, setAudioElement] = useState<HTMLAudioElement | null>(null);
   const [selectedVoice, setSelectedVoice] = useState('21m00Tcm4TlvDq8ikWAM');
+
+  // Summarization states
+  const [summarizedPrompt, setSummarizedPrompt] = useState<string>('');
+  const [isSummarizing, setIsSummarizing] = useState(false);
 
   // Memoized fetchVideos function to prevent infinite loops
   const fetchVideos = useCallback(async (searchQuery: string) => {
@@ -101,7 +111,7 @@ export default function ContentPreview({
         },
         body: JSON.stringify({
           prompt: searchQuery,
-          per_page: 6,  // Increased to 6 for better grid layout
+          per_page: 6,
         }),
       });
 
@@ -163,6 +173,63 @@ export default function ContentPreview({
     };
   }, [audioElement]);
 
+  // Summarize prompt when content loads
+  const summarizeVideoPrompt = useCallback(async (fullPrompt: string): Promise<string> => {
+    if (!fullPrompt || fullPrompt.trim() === '') {
+      return '';
+    }
+
+    const wordCount = fullPrompt.trim().split(/\s+/).length;
+    if (wordCount <= 50) {
+      return fullPrompt;
+    }
+
+    setIsSummarizing(true);
+    try {
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+      const token = localStorage.getItem('access_token');
+
+      if (!token) {
+        throw new Error('No authentication token found');
+      }
+
+      const response = await fetch(`${API_URL}/api/v1/content/summarize-prompt`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          prompt: fullPrompt,
+          max_words: 50,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to summarize prompt');
+      }
+
+      const data = await response.json();
+      return data.summarized_prompt || fullPrompt;
+
+    } catch (error) {
+      console.error('[Summarize] Error:', error);
+      toast({
+        title: 'Summarization failed',
+        description: 'Using original prompt',
+        variant: 'destructive',
+      });
+      return fullPrompt.split(/\s+/).slice(0, 50).join(' ') + '...';
+    } finally {
+      setIsSummarizing(false);
+    }
+  }, [toast]);
+
+  useEffect(() => {
+    const prompt = content.image_prompt || content.topic;
+    if (prompt) summarizeVideoPrompt(prompt).then(setSummarizedPrompt);
+  }, [content.image_prompt, content.topic, summarizeVideoPrompt]);
+
   const handleApproveAndPublish = async () => {
     if (onApprove) {
       const result = await onApprove();
@@ -171,6 +238,98 @@ export default function ContentPreview({
       }
     }
     setPublishDialogOpen(true);
+  };
+
+  // Video selection handler
+  const toggleVideoSelection = (video: VideoResult) => {
+    setSelectedVideos(prev => {
+      const isSelected = prev.some(v => v.id === video.id);
+      
+      if (isSelected) {
+        return prev.filter(v => v.id !== video.id);
+      } else {
+        if (prev.length >= 3) {
+          toast({
+            title: 'Maximum limit reached',
+            description: 'You can select up to 3 videos only',
+            variant: 'destructive',
+          });
+          return prev;
+        }
+        return [...prev, video];
+      }
+    });
+  };
+
+  // Merge videos using Remotion
+  const mergeSelectedVideos = async () => {
+    if (selectedVideos.length < 2) {
+      toast({
+        title: 'Select videos',
+        description: 'Please select at least 2 videos to merge',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setIsMergingVideos(true);
+    setMergeError(null);
+
+    try {
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+      const token = localStorage.getItem('access_token');
+
+      if (!token) {
+        throw new Error('No authentication token found');
+      }
+
+      console.log('[Merge Videos] Sending request with videos:', selectedVideos.map(v => v.id));
+
+      const response = await fetch(`${API_URL}/api/v1/content/merge-videos`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          videos: selectedVideos.map(v => ({
+            id: v.id,
+            video_url: v.video_url,
+            duration: v.duration,
+            width: v.width,
+            height: v.height,
+          })),
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || 'Failed to merge videos');
+      }
+
+      const responseData = await response.json();
+      
+      if (responseData.success) {
+        setMergedVideoUrl(responseData.merged_video_url);
+        toast({
+          title: 'Videos merged successfully!',
+          description: `Created ${responseData.duration}s video from ${selectedVideos.length} clips`,
+        });
+      } else {
+        throw new Error(responseData.error || 'Failed to merge videos');
+      }
+    } catch (error) {
+      console.error('[Merge Videos] Error:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Failed to merge videos';
+      setMergeError(errorMessage);
+      toast({
+        title: 'Video merge failed',
+        description: errorMessage,
+        variant: 'destructive',
+      });
+    } finally {
+      setIsMergingVideos(false);
+    }
   };
 
   // Generate audio from caption
@@ -214,7 +373,6 @@ export default function ContentPreview({
 
       if (data.success) {
         setAudioData(data);
-        // Stop any currently playing audio
         if (audioElement) {
           audioElement.pause();
           setIsPlayingAudio(false);
@@ -238,75 +396,7 @@ export default function ContentPreview({
       setIsGeneratingAudio(false);
     }
   };
-  // Updated content-preview.tsx with AI summarization
-  // Add this new state and function at the top of your component:
 
-  const [summarizedPrompt, setSummarizedPrompt] = useState<string>('');
-  const [isSummarizing, setIsSummarizing] = useState(false);
-
-  // Add this function to summarize the video prompt using Gemini API
-  const summarizeVideoPrompt = useCallback(async (fullPrompt: string): Promise<string> => {
-    if (!fullPrompt || fullPrompt.trim() === '') {
-      return '';
-    }
-
-    // Check word count first
-    const wordCount = fullPrompt.trim().split(/\s+/).length;
-    if (wordCount <= 50) {
-      // Already short enough, no need to summarize
-      return fullPrompt;
-    }
-
-    setIsSummarizing(true);
-    try {
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-      const token = localStorage.getItem('access_token');
-
-      if (!token) {
-        throw new Error('No authentication token found');
-      }
-
-      // Call backend to summarize using Gemini
-      const response = await fetch(`${API_URL}/api/v1/content/summarize-prompt`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          prompt: fullPrompt,
-          max_words: 50,
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to summarize prompt');
-      }
-
-      const data = await response.json();
-      return data.summarized_prompt || fullPrompt;
-
-    } catch (error) {
-      console.error('[Summarize] Error:', error);
-      toast({
-        title: 'Summarization failed',
-        description: 'Using original prompt',
-        variant: 'destructive',
-      });
-      // Fallback: Simple word limit
-      return fullPrompt.split(/\s+/).slice(0, 50).join(' ') + '...';
-    } finally {
-      setIsSummarizing(false);
-    }
-  }, [toast]);
-
-  // Add this useEffect to summarize when content loads
-  useEffect(() => {
-    const prompt = content.image_prompt || content.topic;
-    if (prompt) summarizeVideoPrompt(prompt).then(setSummarizedPrompt);
-  }, [content.image_prompt, content.topic]);
-
-  // Replace the "AI Voiceover Generation" Card section:
   // Play/Pause audio
   const toggleAudioPlayback = () => {
     if (!audioData?.audio_data_url) return;
@@ -396,8 +486,6 @@ export default function ContentPreview({
     });
   };
 
-  // (Removed unused caption helper and platform state.)
-
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700">
       {/* Success Header */}
@@ -473,19 +561,75 @@ export default function ContentPreview({
         </CardContent>
       </Card>
 
-      {/* Video Suggestions - Portrait Layout */}
+      {/* Video Suggestions - Portrait Layout with Selection */}
       <Card className="border-0 shadow-2xl bg-white/80">
         <CardHeader className="bg-gradient-to-r from-purple-50 via-pink-50 to-purple-50 border-b-2 border-slate-100">
-          <CardTitle className="flex items-center gap-3 text-xl">
-            <div className="p-3 bg-gradient-to-br from-purple-600 to-pink-600 rounded-xl shadow-lg">
-              <Video className="h-6 w-6 text-white" />
-            </div>
-            <span className="bg-gradient-to-r from-purple-700 to-pink-700 bg-clip-text text-transparent font-bold">
-              Suggested Portrait Videos from Pexels
-            </span>
-          </CardTitle>
+          <div className="flex items-center justify-between">
+            <CardTitle className="flex items-center gap-3 text-xl">
+              <div className="p-3 bg-gradient-to-br from-purple-600 to-pink-600 rounded-xl shadow-lg">
+                <Video className="h-6 w-6 text-white" />
+              </div>
+              <span className="bg-gradient-to-r from-purple-700 to-pink-700 bg-clip-text text-transparent font-bold">
+                Suggested Portrait Videos from Pexels
+              </span>
+            </CardTitle>
+            {selectedVideos.length > 0 && (
+              <Badge className="bg-purple-600 text-white px-3 py-1.5">
+                {selectedVideos.length} selected
+              </Badge>
+            )}
+          </div>
         </CardHeader>
-        <CardContent className="p-6">
+        <CardContent className="p-6 space-y-4">
+          {/* Selection Info */}
+          {selectedVideos.length > 0 && (
+            <div className="bg-gradient-to-r from-purple-50 to-pink-50 border-2 border-purple-200 rounded-xl p-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-purple-600 rounded-lg">
+                    <Video className="h-5 w-5 text-white" />
+                  </div>
+                  <div>
+                    <p className="font-semibold text-purple-900">
+                      {selectedVideos.length} video{selectedVideos.length > 1 ? 's' : ''} selected
+                    </p>
+                    <p className="text-sm text-purple-700">
+                      {selectedVideos.length < 2 
+                        ? 'Select at least 2 videos to merge' 
+                        : `Ready to merge ${selectedVideos.length} videos`}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    onClick={mergeSelectedVideos}
+                    disabled={selectedVideos.length < 2 || isMergingVideos}
+                    className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700"
+                  >
+                    {isMergingVideos ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Merging...
+                      </>
+                    ) : (
+                      <>
+                        <Video className="h-4 w-4 mr-2" />
+                        Merge Videos
+                      </>
+                    )}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => setSelectedVideos([])}
+                    disabled={isMergingVideos}
+                  >
+                    Clear
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
+
           {isLoadingVideos ? (
             <div className="flex items-center justify-center py-12">
               <Loader2 className="h-8 w-8 animate-spin text-purple-600" />
@@ -515,48 +659,187 @@ export default function ContentPreview({
             </div>
           ) : (
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-4">
-              {videos.map((video) => (
-                <div
-                  key={video.id}
-                  className="group relative rounded-xl overflow-hidden border-2 border-slate-200 hover:border-purple-300 transition-all hover:shadow-lg"
-                >
-                  <div className="relative aspect-[9/16] bg-slate-100">
-                    <Image
-                      src={video.image}
-                      alt="Video preview"
-                      fill
-                      className="object-cover"
-                      unoptimized
-                    />
-                    <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                      <Video className="h-10 w-10 text-white" />
+              {videos.map((video) => {
+                const isSelected = selectedVideos.some(v => v.id === video.id);
+                const selectionIndex = selectedVideos.findIndex(v => v.id === video.id);
+                
+                return (
+                  <div
+                    key={video.id}
+                    className={`group relative rounded-xl overflow-hidden border-2 transition-all cursor-pointer ${
+                      isSelected 
+                        ? 'border-purple-500 shadow-lg ring-4 ring-purple-200' 
+                        : 'border-slate-200 hover:border-purple-300'
+                    } hover:shadow-lg`}
+                    onClick={() => toggleVideoSelection(video)}
+                  >
+                    <div className="relative aspect-[9/16] bg-slate-100">
+                      <Image
+                        src={video.image}
+                        alt="Video preview"
+                        fill
+                        className="object-cover"
+                        unoptimized
+                      />
+                      {/* Selection overlay */}
+                      {isSelected && (
+                        <div className="absolute inset-0 bg-purple-600/30 flex items-center justify-center">
+                          <div className="bg-purple-600 text-white rounded-full w-12 h-12 flex items-center justify-center font-bold text-xl shadow-lg">
+                            {selectionIndex + 1}
+                          </div>
+                        </div>
+                      )}
+                      {/* Hover overlay */}
+                      <div className={`absolute inset-0 ${isSelected ? 'bg-purple-600/20' : 'bg-black/30'} opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center`}>
+                        {isSelected ? (
+                          <div className="bg-white text-purple-600 px-3 py-1.5 rounded-full text-sm font-semibold">
+                            ✓ Selected #{selectionIndex + 1}
+                          </div>
+                        ) : (
+                          <div className="bg-white/90 text-purple-600 px-3 py-1.5 rounded-full text-sm font-semibold">
+                            Click to select
+                          </div>
+                        )}
+                      </div>
+                      <div className="absolute bottom-2 right-2 bg-black/70 text-white text-xs px-2 py-1 rounded">
+                        {Math.floor(video.duration)}s
+                      </div>
+                      {/* Selection badge */}
+                      {isSelected && (
+                        <div className="absolute top-2 left-2 bg-purple-600 text-white text-xs px-2 py-1 rounded-full font-bold">
+                          #{selectionIndex + 1}
+                        </div>
+                      )}
                     </div>
-                    <div className="absolute bottom-2 right-2 bg-black/70 text-white text-xs px-2 py-1 rounded">
-                      {Math.floor(video.duration)}s
+                    <div className="p-2 bg-white">
+                      <p className="text-xs text-slate-600 mb-1 truncate">
+                        {video.width}x{video.height}
+                      </p>
+                      <div className="flex items-center justify-between gap-1">
+                        <p className="text-xs text-slate-500 truncate flex-1">{video.user.name}</p>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            window.open(video.video_url, '_blank');
+                          }}
+                          className="h-6 px-1.5 shrink-0"
+                        >
+                          <ExternalLink className="h-3 w-3" />
+                        </Button>
+                      </div>
                     </div>
                   </div>
-                  <div className="p-2 bg-white">
-                    <p className="text-xs text-slate-600 mb-1 truncate">
-                      {video.width}x{video.height}
-                    </p>
-                    <div className="flex items-center justify-between gap-1">
-                      <p className="text-xs text-slate-500 truncate flex-1">{video.user.name}</p>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => window.open(video.video_url, '_blank')}
-                        className="h-6 px-1.5 shrink-0"
-                      >
-                        <ExternalLink className="h-3 w-3" />
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </CardContent>
       </Card>
+
+      {/* Merged Video Section */}
+      {(mergedVideoUrl || isMergingVideos) && (
+        <Card className="border-0 shadow-2xl bg-white/80">
+          <CardHeader className="bg-gradient-to-r from-green-50 via-emerald-50 to-teal-50 border-b-2 border-slate-100">
+            <CardTitle className="flex items-center gap-3 text-xl">
+              <div className="p-3 bg-gradient-to-br from-green-600 to-emerald-600 rounded-xl shadow-lg">
+                <Video className="h-6 w-6 text-white" />
+              </div>
+              <span className="bg-gradient-to-r from-green-700 to-emerald-700 bg-clip-text text-transparent font-bold">
+                Merged Video
+              </span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-6">
+            {isMergingVideos ? (
+              <div className="flex flex-col items-center justify-center py-16 space-y-4">
+                <Loader2 className="h-12 w-12 animate-spin text-purple-600" />
+                <div className="text-center">
+                  <p className="text-lg font-semibold text-slate-700 mb-2">
+                    Merging your videos...
+                  </p>
+                  <p className="text-sm text-slate-500">
+                    This may take 30-60 seconds depending on video length
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 mt-4">
+                  <div className="w-2 h-2 bg-purple-600 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                  <div className="w-2 h-2 bg-pink-600 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                  <div className="w-2 h-2 bg-emerald-600 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                </div>
+              </div>
+            ) : mergeError ? (
+              <div className="text-center py-12">
+                <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-red-100 mb-4">
+                  <X className="h-8 w-8 text-red-600" />
+                </div>
+                <p className="text-red-600 font-medium mb-2">Merge Failed</p>
+                <p className="text-sm text-slate-600 mb-4">{mergeError}</p>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setMergeError(null);
+                    mergeSelectedVideos();
+                  }}
+                >
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                  Try Again
+                </Button>
+              </div>
+            ) : mergedVideoUrl ? (
+              <div className="space-y-4">
+                <div className="relative aspect-video rounded-xl overflow-hidden bg-black">
+                  <video
+                    src={mergedVideoUrl}
+                    controls
+                    className="w-full h-full"
+                    poster={selectedVideos[0]?.image}
+                  >
+                    Your browser does not support the video tag.
+                  </video>
+                </div>
+                <div className="flex items-center justify-between p-4 bg-gradient-to-r from-green-50 to-emerald-50 rounded-lg border-2 border-green-200">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-green-600 rounded-lg">
+                      <Video className="h-5 w-5 text-white" />
+                    </div>
+                    <div>
+                      <p className="font-semibold text-green-900">
+                        Video merged successfully!
+                      </p>
+                      <p className="text-sm text-green-700">
+                        Combined {selectedVideos.length} videos into one
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      onClick={() => window.open(mergedVideoUrl, '_blank')}
+                      variant="outline"
+                      className="border-green-300 hover:bg-green-50"
+                    >
+                      <Download className="h-4 w-4 mr-2" />
+                      Download
+                    </Button>
+                    <Button
+                      onClick={() => {
+                        setMergedVideoUrl(null);
+                        setSelectedVideos([]);
+                      }}
+                      variant="outline"
+                      className="border-purple-300 hover:bg-purple-50"
+                    >
+                      <RefreshCw className="h-4 w-4 mr-2" />
+                      Merge New
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            ) : null}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Audio Generation Section */}
       <Card className="border-0 shadow-2xl bg-white/80">
@@ -727,7 +1010,7 @@ export default function ContentPreview({
         </CardHeader>
         <CardContent className="p-6">
           <Tabs defaultValue="facebook" className="w-full">
-            <TabsList className="grid w-full grid-cols-5">
+            <TabsList className="grid w-full grid-cols-4">
               {platforms.map((platform) => (
                 <TabsTrigger key={platform.name} value={platform.name.toLowerCase()}>
                   <platform.icon className={`h-4 w-4 mr-1.5 ${platform.color}`} />

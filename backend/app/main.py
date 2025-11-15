@@ -90,7 +90,7 @@ app.include_router(
 
 # Mount static files for serving uploaded images
 app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
-
+app.mount("/uploads/videos", StaticFiles(directory="uploads/videos"), name="videos")
 
 if __name__ == "__main__":
     import uvicorn

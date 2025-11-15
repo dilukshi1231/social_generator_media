@@ -19,6 +19,12 @@ from pydantic import BaseModel
 from app.services.pexels_service import PexelsService
 from app.services.keyword_extractor import KeywordExtractorService
 from app.core.config import settings
+from typing import List
+import subprocess
+import json
+from pathlib import Path
+import uuid
+import asyncio
 
 router = APIRouter()
 
@@ -39,7 +45,14 @@ class VideoSearchResponse(BaseModel):
     total_results: int
     videos: List[dict]
 
-
+class VideoMergeRequest(BaseModel):
+    videos: List[dict]  # Each video has: id, video_url, duration, width, height
+class VideoMergeResponse(BaseModel):
+    success: bool
+    merged_video_url: Optional[str] = None
+    file_path: Optional[str] = None
+    duration: Optional[float] = None
+    error: Optional[str] = None
 class AudioGenerateRequest(BaseModel):
     text: str
     voice_id: Optional[str] = "21m00Tcm4TlvDq8ikWAM"
@@ -326,7 +339,206 @@ async def extract_video_frames(video_path: str, num_frames: int = 5) -> list[str
 
     return frames
 
+@router.post("/merge-videos", response_model=VideoMergeResponse)
+async def merge_videos(
+    request: VideoMergeRequest,
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Merge multiple Pexels videos using Remotion.
+    
+    Process:
+    1. Download videos temporarily
+    2. Create Remotion composition config
+    3. Render merged video using Remotion
+    4. Save and return merged video
+    """
+    try:
+        print(f"[Video Merge] User: {current_user.email}")
+        print(f"[Video Merge] Merging {len(request.videos)} videos")
+        
+        if len(request.videos) < 2:
+            raise ValueError("At least 2 videos are required for merging")
+        
+        if len(request.videos) > 3:
+            raise ValueError("Maximum 3 videos can be merged at once")
+        
+        # Create temp directories
+        temp_dir = Path(tempfile.gettempdir()) / "video_merge" / str(uuid.uuid4())
+        temp_dir.mkdir(parents=True, exist_ok=True)
+        
+        downloads_dir = temp_dir / "downloads"
+        downloads_dir.mkdir(exist_ok=True)
+        
+        output_dir = Path("uploads/videos")
+        output_dir.mkdir(parents=True, exist_ok=True)
+        
+        print(f"[Video Merge] Temp directory: {temp_dir}")
+        
+        # Step 1: Download all videos
+        downloaded_videos = []
+        total_duration = 0
+        
+        for idx, video in enumerate(request.videos):
+            print(f"[Video Merge] Downloading video {idx + 1}/{len(request.videos)}")
+            
+            video_path = downloads_dir / f"video_{idx}.mp4"
+            
+            async with httpx.AsyncClient(timeout=120.0) as client:
+                response = await client.get(video["video_url"])
+                response.raise_for_status()
+                
+                with open(video_path, 'wb') as f:
+                    f.write(response.content)
+            
+            downloaded_videos.append({
+                "path": str(video_path),
+                "duration": video["duration"],
+                "width": video["width"],
+                "height": video["height"],
+            })
+            
+            total_duration += video["duration"]
+            print(f"[Video Merge] Downloaded: {video_path}")
+        
+        # Step 2: Create Remotion composition config
+        composition_config = {
+            "videos": downloaded_videos,
+            "fps": 30,
+            "durationInFrames": int(total_duration * 30),  # 30 fps
+            "width": 1080,  # Portrait video width
+            "height": 1920,  # Portrait video height
+        }
+        
+        config_path = temp_dir / "composition.json"
+        with open(config_path, 'w') as f:
+            json.dump(composition_config, f, indent=2)
+        
+        print(f"[Video Merge] Composition config created: {config_path}")
+        
+        # Step 3: Render video using Remotion
+        output_filename = f"merged_{current_user.id}_{uuid.uuid4().hex[:8]}.mp4"
+        output_path = output_dir / output_filename
+        
+        print(f"[Video Merge] Starting Remotion render...")
+        
+        # Call Remotion render using Node.js subprocess
+        remotion_result = await render_with_remotion(
+            composition_config=config_path,
+            output_path=output_path,
+            temp_dir=temp_dir
+        )
+        
+        if not remotion_result["success"]:
+            raise ValueError(remotion_result["error"])
+        
+        print(f"[Video Merge] Render complete: {output_path}")
+        
+        # Step 4: Cleanup temp files
+        cleanup_temp_directory(temp_dir)
+        
+        # Return merged video URL
+        video_url = f"/uploads/videos/{output_filename}"
+        
+        return VideoMergeResponse(
+            success=True,
+            merged_video_url=video_url,
+            file_path=str(output_path),
+            duration=total_duration,
+        )
+        
+    except ValueError as e:
+        print(f"[Video Merge] ValueError: {str(e)}")
+        return VideoMergeResponse(
+            success=False,
+            error=str(e)
+        )
+    except Exception as e:
+        print(f"[Video Merge] Exception: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return VideoMergeResponse(
+            success=False,
+            error=f"Failed to merge videos: {str(e)}"
+        )
 
+
+async def render_with_remotion(
+    composition_config: Path,
+    output_path: Path,
+    temp_dir: Path
+) -> dict:
+    """
+    Render video using Remotion via Node.js subprocess.
+    
+    This calls a separate Node.js script that uses Remotion's rendering API.
+    """
+    try:
+        # Path to the Remotion render script
+        render_script = Path("backend/scripts/render_video.js")
+        
+        if not render_script.exists():
+            return {
+                "success": False,
+                "error": "Remotion render script not found. Please create backend/scripts/render_video.js"
+            }
+        
+        # Call Node.js script
+        process = await asyncio.create_subprocess_exec(
+            "node",
+            str(render_script),
+            str(composition_config),
+            str(output_path),
+            str(temp_dir),
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        
+        stdout, stderr = await process.communicate()
+        
+        if process.returncode != 0:
+            error_msg = stderr.decode() if stderr else "Unknown render error"
+            print(f"[Remotion] Render failed: {error_msg}")
+            return {
+                "success": False,
+                "error": f"Remotion render failed: {error_msg}"
+            }
+        
+        output = stdout.decode() if stdout else ""
+        print(f"[Remotion] Render output: {output}")
+        
+        return {
+            "success": True,
+            "output": output
+        }
+        
+    except FileNotFoundError:
+        return {
+            "success": False,
+            "error": "Node.js not found. Please install Node.js to use video merging."
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "error": f"Remotion render error: {str(e)}"
+        }
+
+
+def cleanup_temp_directory(temp_dir: Path):
+    """Clean up temporary directory and all files."""
+    try:
+        import shutil
+        if temp_dir.exists():
+            shutil.rmtree(temp_dir)
+            print(f"[Cleanup] Removed temp directory: {temp_dir}")
+    except Exception as e:
+        print(f"[Cleanup] Failed to remove temp directory: {str(e)}")
+
+
+# Also update the main.py to mount videos directory
+# In backend/app/main.py, add this after the uploads mount:
+
+# app.mount("/uploads/videos", StaticFiles(directory="uploads/videos"), name="videos")
 async def analyze_frames_with_gemini(frames: list[str], duration: float) -> str:
     """
     Analyze video frames using FREE Google Gemini Vision API.

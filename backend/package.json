@@ -1,0 +1,10 @@
+{
+  "dependencies": {
+    "@remotion/bundler": "^4.0.375",
+    "@remotion/cli": "^4.0.375",
+    "@remotion/renderer": "^4.0.375",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "remotion": "^4.0.375"
+  }
+}
