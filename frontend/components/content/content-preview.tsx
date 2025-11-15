@@ -3,12 +3,13 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
-import { Check, X, RefreshCw, Facebook, Instagram, Linkedin, Image as ImageIcon, Copy, Sparkles, Video, ExternalLink, Loader2, Volume2, Play, Pause, Download } from 'lucide-react';
+import { Check, X, RefreshCw, Facebook, Instagram, Linkedin, Image as ImageIcon, Copy, Sparkles, Video, ExternalLink, Loader2, Volume2, Play, Pause, Download, Scissors } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import type { Content } from '@/types';
 import Image from 'next/image';
 import PublishDialog from '@/components/content/publish-dialog';
 import VideoPreviewModal from '@/components/content/video-preview-modal';
+import VideoEditorModal from '@/components/content/video-editor-modal';
 // Video player component not used here; import removed to fix unused import warnings
 
 // X (Twitter) Icon Component
@@ -75,6 +76,9 @@ export default function ContentPreview({
   const [selectedVideo, setSelectedVideo] = useState<VideoResult | null>(null);
   const [isVideoModalOpen, setIsVideoModalOpen] = useState(false);
 
+  // Video editor modal state
+  const [isEditorOpen, setIsEditorOpen] = useState(false);
+
   // Audio states
   const [audioData, setAudioData] = useState<AudioData | null>(null);
   const [isGeneratingAudio, setIsGeneratingAudio] = useState(false);
@@ -92,6 +96,11 @@ export default function ContentPreview({
   const handleCloseVideoModal = () => {
     setIsVideoModalOpen(false);
     setSelectedVideo(null);
+  };
+
+  // Handler to open video editor
+  const handleOpenEditor = () => {
+    setIsEditorOpen(true);
   };
 
   // Memoized fetchVideos function to prevent infinite loops
@@ -493,14 +502,25 @@ export default function ContentPreview({
       {/* Video Suggestions - Portrait Layout */}
       <Card className="border-0 shadow-2xl bg-white/80">
         <CardHeader className="bg-gradient-to-r from-purple-50 via-pink-50 to-purple-50 border-b-2 border-slate-100">
-          <CardTitle className="flex items-center gap-3 text-xl">
-            <div className="p-3 bg-gradient-to-br from-purple-600 to-pink-600 rounded-xl shadow-lg">
-              <Video className="h-6 w-6 text-white" />
-            </div>
-            <span className="bg-gradient-to-r from-purple-700 to-pink-700 bg-clip-text text-transparent font-bold">
-              Suggested Portrait Videos from Pexels
-            </span>
-          </CardTitle>
+          <div className="flex items-center justify-between">
+            <CardTitle className="flex items-center gap-3 text-xl">
+              <div className="p-3 bg-gradient-to-br from-purple-600 to-pink-600 rounded-xl shadow-lg">
+                <Video className="h-6 w-6 text-white" />
+              </div>
+              <span className="bg-gradient-to-r from-purple-700 to-pink-700 bg-clip-text text-transparent font-bold">
+                Suggested Portrait Videos from Pexels
+              </span>
+            </CardTitle>
+            {videos.length > 0 && (
+              <Button
+                onClick={handleOpenEditor}
+                className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700"
+              >
+                <Scissors className="h-4 w-4 mr-2" />
+                Edit & Merge Videos
+              </Button>
+            )}
+          </div>
         </CardHeader>
         <CardContent className="p-6">
           {isLoadingVideos ? (
@@ -830,6 +850,13 @@ export default function ContentPreview({
         isOpen={isVideoModalOpen}
         onClose={handleCloseVideoModal}
         video={selectedVideo}
+      />
+
+      {/* Video Editor Modal */}
+      <VideoEditorModal
+        isOpen={isEditorOpen}
+        onClose={() => setIsEditorOpen(false)}
+        videos={videos}
       />
     </div>
   );
