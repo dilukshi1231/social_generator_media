@@ -28,15 +28,32 @@ export default function VideoPreviewModal({ isOpen, onClose, video }: VideoPrevi
     const [currentTime, setCurrentTime] = useState(0);
     const [duration, setDuration] = useState(0);
     const [isFullscreen, setIsFullscreen] = useState(false);
+    const [videoError, setVideoError] = useState<string | null>(null);
 
     // Reset state when modal opens/closes
     useEffect(() => {
         if (isOpen && videoRef.current) {
             setIsPlaying(false);
             setCurrentTime(0);
+            setVideoError(null);
             videoRef.current.currentTime = 0;
         }
     }, [isOpen, video]);
+
+    // Reload video when URL changes
+    useEffect(() => {
+        const videoElement = videoRef.current;
+        if (videoElement && video?.video_url) {
+            console.log('[VideoPreview] Loading video from URL:', video.video_url);
+            console.log('[VideoPreview] URL type:', video.video_url.startsWith('blob:') ? 'blob' : 'http');
+
+            // Reset error state
+            setVideoError(null);
+
+            // Force reload the video
+            videoElement.load();
+        }
+    }, [video?.video_url]);
 
     // Handle escape key
     useEffect(() => {
@@ -88,6 +105,51 @@ export default function VideoPreviewModal({ isOpen, onClose, video }: VideoPrevi
     const handleLoadedMetadata = () => {
         if (videoRef.current) {
             setDuration(videoRef.current.duration);
+            setVideoError(null);
+            console.log('[VideoPreview] Metadata loaded - Duration:', videoRef.current.duration, 'Source:', videoRef.current.src);
+        }
+    };
+
+    const handleVideoError = (e: React.SyntheticEvent<HTMLVideoElement, Event>) => {
+        const videoElement = e.currentTarget;
+        const error = videoElement.error;
+        let errorMessage = 'Unknown error';
+
+        if (error) {
+            switch (error.code) {
+                case error.MEDIA_ERR_ABORTED:
+                    errorMessage = 'Video playback was aborted';
+                    break;
+                case error.MEDIA_ERR_NETWORK:
+                    errorMessage = 'Network error occurred while loading video';
+                    break;
+                case error.MEDIA_ERR_DECODE:
+                    errorMessage = 'Video decoding error';
+                    break;
+                case error.MEDIA_ERR_SRC_NOT_SUPPORTED:
+                    errorMessage = 'Video format not supported';
+                    break;
+            }
+            if (error.message) {
+                errorMessage += `: ${error.message}`;
+            }
+        }
+
+        console.error('[VideoPreview] Video error:', {
+            code: error?.code,
+            message: error?.message,
+            src: videoElement.src,
+            networkState: videoElement.networkState,
+            readyState: videoElement.readyState,
+            videoUrl: video?.video_url
+        });
+
+        setVideoError(errorMessage);
+    };
+
+    const handleCanPlay = () => {
+        if (videoRef.current) {
+            console.log('[VideoPreview] Video can play - Ready state:', videoRef.current.readyState);
         }
     };
 
@@ -153,14 +215,30 @@ export default function VideoPreviewModal({ isOpen, onClose, video }: VideoPrevi
                     <div className="relative flex items-center justify-center bg-black" style={{ minHeight: '60vh', maxHeight: '80vh' }}>
                         <video
                             ref={videoRef}
-                            src={video.video_url}
+                            key={video.video_url} // Force re-render on URL change
                             poster={video.image}
                             className="max-h-[80vh] w-auto max-w-full object-contain"
                             onTimeUpdate={handleTimeUpdate}
                             onLoadedMetadata={handleLoadedMetadata}
                             onEnded={() => setIsPlaying(false)}
                             onClick={togglePlayPause}
-                        />
+                            onError={handleVideoError}
+                            onCanPlay={handleCanPlay}
+                            preload="metadata"
+                        >
+                            <source src={video.video_url} type="video/mp4" />
+                            Your browser does not support the video tag.
+                        </video>
+
+                        {/* Error overlay */}
+                        {videoError && (
+                            <div className="absolute inset-0 flex items-center justify-center bg-black/80">
+                                <div className="bg-red-500/90 text-white px-6 py-4 rounded-lg max-w-md text-center">
+                                    <p className="font-semibold mb-2">Video Error</p>
+                                    <p className="text-sm">{videoError}</p>
+                                </div>
+                            </div>
+                        )}
 
                         {/* Play overlay when paused */}
                         {!isPlaying && (

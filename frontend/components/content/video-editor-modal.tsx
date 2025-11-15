@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { X, Scissors, Plus, Trash2, MoveVertical, Download, Loader2, Play } from 'lucide-react';
+import { X, Scissors, Plus, Trash2, MoveVertical, Download, Loader2, Play, Check } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Slider } from '@/components/ui/slider';
@@ -44,9 +44,10 @@ interface VideoEditorModalProps {
             url: string;
         };
     }>;
+    onSaveMergedVideo?: (videoUrl: string, videoBlob: Blob) => void;
 }
 
-export default function VideoEditorModal({ isOpen, onClose, videos }: VideoEditorModalProps) {
+export default function VideoEditorModal({ isOpen, onClose, videos, onSaveMergedVideo }: VideoEditorModalProps) {
     const { toast } = useToast();
     const [selectedClips, setSelectedClips] = useState<VideoClip[]>([]);
     const [isProcessing, setIsProcessing] = useState(false);
@@ -55,6 +56,9 @@ export default function VideoEditorModal({ isOpen, onClose, videos }: VideoEdito
     const [isFFmpegLoaded, setIsFFmpegLoaded] = useState(false);
     const [draggedClip, setDraggedClip] = useState<string | null>(null);
     const [previewVideoUrl, setPreviewVideoUrl] = useState<string | null>(null);
+    const [mergedVideoBlob, setMergedVideoBlob] = useState<Blob | null>(null);
+    const [mergedVideoUrl, setMergedVideoUrl] = useState<string | null>(null);
+    const [isVideoSaved, setIsVideoSaved] = useState(false);
 
     // Load FFmpeg on mount
     useEffect(() => {
@@ -88,8 +92,15 @@ export default function VideoEditorModal({ isOpen, onClose, videos }: VideoEdito
     useEffect(() => {
         if (!isOpen) {
             setSelectedClips([]);
+            // Only revoke URL if video wasn't saved
+            if (mergedVideoUrl && !isVideoSaved) {
+                URL.revokeObjectURL(mergedVideoUrl);
+            }
+            setMergedVideoBlob(null);
+            setMergedVideoUrl(null);
+            setIsVideoSaved(false);
         }
-    }, [isOpen]);
+    }, [isOpen, mergedVideoUrl, isVideoSaved]);
 
     // Handle escape key
     useEffect(() => {
@@ -194,19 +205,19 @@ export default function VideoEditorModal({ isOpen, onClose, videos }: VideoEdito
                 }
             );
 
-            // Create download link
+            // Clean up previous merged video URL
+            if (mergedVideoUrl) {
+                URL.revokeObjectURL(mergedVideoUrl);
+            }
+
+            // Create object URL for the merged video
             const url = URL.createObjectURL(videoBlob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `merged-video-${Date.now()}.mp4`;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
+            setMergedVideoBlob(videoBlob);
+            setMergedVideoUrl(url);
 
             toast({
-                title: 'Export complete!',
-                description: 'Your merged video has been downloaded',
+                title: 'Video merged successfully!',
+                description: 'Your video is ready to preview and download',
             });
 
             setProcessingMessage('');
@@ -222,6 +233,54 @@ export default function VideoEditorModal({ isOpen, onClose, videos }: VideoEdito
             setIsProcessing(false);
             setProcessingProgress(0);
         }
+    };
+
+    const handleDownload = () => {
+        if (!mergedVideoBlob) return;
+
+        const url = URL.createObjectURL(mergedVideoBlob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `merged-video-${Date.now()}.mp4`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+
+        toast({
+            title: 'Download started',
+            description: 'Your merged video is being downloaded',
+        });
+    };
+
+    const handleRedo = () => {
+        if (mergedVideoUrl) {
+            URL.revokeObjectURL(mergedVideoUrl);
+        }
+        setMergedVideoBlob(null);
+        setMergedVideoUrl(null);
+        toast({
+            title: 'Ready to edit',
+            description: 'Adjust your clips and merge again',
+        });
+    };
+
+    const handleSave = () => {
+        if (!mergedVideoUrl || !mergedVideoBlob) return;
+
+        // Mark video as saved so URL won't be revoked on modal close
+        setIsVideoSaved(true);
+
+        // Pass the merged video to parent component
+        onSaveMergedVideo?.(mergedVideoUrl, mergedVideoBlob);
+
+        toast({
+            title: 'Video saved!',
+            description: 'Your merged video has been saved',
+        });
+
+        // Close the modal
+        onClose();
     };
 
     if (!isOpen) return null;
@@ -292,15 +351,57 @@ export default function VideoEditorModal({ isOpen, onClose, videos }: VideoEdito
 
                     {/* Main Panel - Timeline */}
                     <div className="flex-1 flex flex-col bg-black/20">
-                        {/* Instructions */}
+                        {/* Merged Video Display or Instructions */}
                         <div className="p-8 border-b border-white/10">
-                            <div className="text-center text-white/80">
-                                <Scissors className="h-12 w-12 mx-auto mb-3 text-purple-400" />
-                                <h3 className="text-xl font-semibold mb-2">Video Timeline Editor</h3>
-                                <p className="text-sm text-white/60">
-                                    Add videos from the left panel, trim them to your desired length, and export
-                                </p>
-                            </div>
+                            {mergedVideoUrl ? (
+                                <div className="space-y-4">
+                                    <div className="text-center">
+                                        <h3 className="text-xl font-semibold text-white mb-2">Merged Video Ready!</h3>
+                                        <p className="text-sm text-white/60">Preview your video and download or redo</p>
+                                    </div>
+                                    <div className="relative aspect-[9/16] w-full max-w-sm mx-auto">
+                                        <video
+                                            src={mergedVideoUrl}
+                                            controls
+                                            className="w-full h-full rounded-lg shadow-2xl"
+                                            poster="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100'%3E%3Crect fill='%23000' width='100' height='100'/%3E%3C/svg%3E"
+                                        />
+                                    </div>
+                                    <div className="flex gap-3 justify-center">
+                                        <Button
+                                            onClick={handleSave}
+                                            className="bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700"
+                                        >
+                                            <Check className="h-4 w-4 mr-2" />
+                                            Save Merged Video
+                                        </Button>
+                                        <Button
+                                            onClick={handleDownload}
+                                            variant="outline"
+                                            className="border-purple-300 text-purple-600 hover:bg-purple-50"
+                                        >
+                                            <Download className="h-4 w-4 mr-2" />
+                                            Download
+                                        </Button>
+                                        <Button
+                                            onClick={handleRedo}
+                                            variant="outline"
+                                            className="border-white/20 text-white hover:bg-white/10"
+                                        >
+                                            <Scissors className="h-4 w-4 mr-2" />
+                                            Redo Edit
+                                        </Button>
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className="text-center text-white/80">
+                                    <Scissors className="h-12 w-12 mx-auto mb-3 text-purple-400" />
+                                    <h3 className="text-xl font-semibold mb-2">Video Timeline Editor</h3>
+                                    <p className="text-sm text-white/60">
+                                        Add videos from the left panel, trim them to your desired length, and export
+                                    </p>
+                                </div>
+                            )}
                         </div>
 
                         {/* Timeline */}
@@ -315,7 +416,7 @@ export default function VideoEditorModal({ isOpen, onClose, videos }: VideoEdito
                                     </div>
                                     <Button
                                         onClick={handleExport}
-                                        disabled={selectedClips.length === 0 || isProcessing || !isFFmpegLoaded}
+                                        disabled={selectedClips.length === 0 || isProcessing || !isFFmpegLoaded || !!mergedVideoUrl}
                                         className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700"
                                     >
                                         {isProcessing ? (
@@ -328,10 +429,15 @@ export default function VideoEditorModal({ isOpen, onClose, videos }: VideoEdito
                                                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                                                 Loading Editor...
                                             </>
+                                        ) : mergedVideoUrl ? (
+                                            <>
+                                                <Scissors className="h-4 w-4 mr-2" />
+                                                Video Merged
+                                            </>
                                         ) : (
                                             <>
                                                 <Download className="h-4 w-4 mr-2" />
-                                                Export Video
+                                                Merge Videos
                                             </>
                                         )}
                                     </Button>

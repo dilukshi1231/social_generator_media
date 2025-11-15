@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -79,6 +79,10 @@ export default function ContentPreview({
   // Video editor modal state
   const [isEditorOpen, setIsEditorOpen] = useState(false);
 
+  // Saved merged videos state
+  const [savedMergedVideos, setSavedMergedVideos] = useState<Array<{ url: string; blob: Blob; timestamp: number }>>([]);
+  const savedVideoUrlsRef = useRef<string[]>([]);
+
   // Audio states
   const [audioData, setAudioData] = useState<AudioData | null>(null);
   const [isGeneratingAudio, setIsGeneratingAudio] = useState(false);
@@ -101,6 +105,23 @@ export default function ContentPreview({
   // Handler to open video editor
   const handleOpenEditor = () => {
     setIsEditorOpen(true);
+  };
+
+  // Handler to close video editor
+  const handleCloseEditor = () => {
+    setIsEditorOpen(false);
+  };
+
+  // Handler to save merged video
+  const handleSaveMergedVideo = (videoUrl: string, videoBlob: Blob) => {
+    // Track URL for cleanup
+    savedVideoUrlsRef.current.push(videoUrl);
+
+    setSavedMergedVideos(prev => [{
+      url: videoUrl,
+      blob: videoBlob,
+      timestamp: Date.now()
+    }, ...prev]);
   };
 
   // Memoized fetchVideos function to prevent infinite loops
@@ -188,6 +209,16 @@ export default function ContentPreview({
       }
     };
   }, [audioElement]);
+
+  // Cleanup blob URLs on unmount only
+  useEffect(() => {
+    const urls = savedVideoUrlsRef.current;
+    return () => {
+      urls.forEach(url => {
+        URL.revokeObjectURL(url);
+      });
+    };
+  }, []);
 
   const handleApproveAndPublish = async () => {
     if (onApprove) {
@@ -498,6 +529,85 @@ export default function ContentPreview({
           )}
         </CardContent>
       </Card>
+
+      {/* Saved Merged Videos Section */}
+      {savedMergedVideos.length > 0 && (
+        <Card className="border-0 shadow-2xl bg-white/80">
+          <CardHeader className="bg-gradient-to-r from-green-50 via-emerald-50 to-green-50 border-b-2 border-slate-100">
+            <CardTitle className="flex items-center gap-3 text-xl">
+              <div className="p-3 bg-gradient-to-br from-green-600 to-emerald-600 rounded-xl shadow-lg">
+                <Scissors className="h-6 w-6 text-white" />
+              </div>
+              <span className="bg-gradient-to-r from-green-700 to-emerald-700 bg-clip-text text-transparent font-bold">
+                Your Merged Videos
+              </span>
+              <Badge variant="secondary" className="ml-2">
+                {savedMergedVideos.length}
+              </Badge>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-6">
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-4">
+              {savedMergedVideos.map((mergedVideo, index) => (
+                <div
+                  key={mergedVideo.timestamp}
+                  className="group relative rounded-xl overflow-hidden border-2 border-green-200 hover:border-green-400 transition-all hover:shadow-lg cursor-pointer"
+                  onClick={() => {
+                    const tempVideo = {
+                      id: mergedVideo.timestamp,
+                      url: mergedVideo.url,
+                      video_url: mergedVideo.url,
+                      image: '',
+                      width: 1080,
+                      height: 1920,
+                      duration: 0,
+                      user: { name: 'Merged Video', url: '' }
+                    };
+                    handleVideoClick(tempVideo);
+                  }}
+                >
+                  <div className="relative aspect-[9/16] bg-slate-100">
+                    <video
+                      src={mergedVideo.url}
+                      className="w-full h-full object-cover pointer-events-none"
+                      preload="metadata"
+                    />
+                    <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                      <div className="bg-white/90 rounded-full p-3 shadow-lg">
+                        <Play className="h-6 w-6 text-green-600" />
+                      </div>
+                    </div>
+                    <div className="absolute top-2 left-2 bg-green-600 text-white text-xs px-2 py-1 rounded-md font-medium">
+                      Merged #{savedMergedVideos.length - index}
+                    </div>
+                  </div>
+                  <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-2">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="w-full text-white hover:bg-white/20"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        const url = URL.createObjectURL(mergedVideo.blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = `merged-video-${mergedVideo.timestamp}.mp4`;
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                        URL.revokeObjectURL(url);
+                      }}
+                    >
+                      <Download className="h-3 w-3 mr-1" />
+                      Download
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Video Suggestions - Portrait Layout */}
       <Card className="border-0 shadow-2xl bg-white/80">
@@ -855,8 +965,9 @@ export default function ContentPreview({
       {/* Video Editor Modal */}
       <VideoEditorModal
         isOpen={isEditorOpen}
-        onClose={() => setIsEditorOpen(false)}
+        onClose={handleCloseEditor}
         videos={videos}
+        onSaveMergedVideo={handleSaveMergedVideo}
       />
     </div>
   );
