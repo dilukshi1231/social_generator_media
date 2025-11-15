@@ -51,6 +51,8 @@ export interface Content {
     threads_caption?: string;
     pinterest_caption?: string;
     image_url?: string;
+    video_url?: string | null;
+    audio_url?: string | null;
     image_prompt?: string;
     image_caption?: string;
     feedback?: string;

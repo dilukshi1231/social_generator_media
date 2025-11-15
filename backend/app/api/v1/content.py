@@ -104,6 +104,8 @@ class ContentResponse(BaseModel):
     image_prompt: Optional[str]
     image_caption: Optional[str]
     image_url: Optional[str]
+    video_url: Optional[str]
+    audio_url: Optional[str]
     extra_data: Optional[dict]
     status: ContentStatus
     created_at: datetime
