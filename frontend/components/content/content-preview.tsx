@@ -28,7 +28,7 @@ const TikTokIcon = ({ className }: { className?: string }) => (
 
 interface ContentPreviewProps {
   content: Content;
-  onApprove?: () => Promise<boolean | void> | boolean | void;
+  onApprove?: () => Promise<boolean | Content | void> | boolean | void;
   onReject: () => void;
   onRegenerateCaptions: () => void;
   onRegenerateImage: () => void;
@@ -221,13 +221,121 @@ export default function ContentPreview({
   }, []);
 
   const handleApproveAndPublish = async () => {
-    if (onApprove) {
-      const result = await onApprove();
-      if (result === false) {
-        return;
+    try {
+      // First, approve and save the content to get the real content ID
+      let contentWithId = content;
+      if (onApprove) {
+        const result = await onApprove();
+        if (result === false) {
+          return;
+        }
+        // onApprove returns the created content with real ID
+        if (result && typeof result === 'object' && 'id' in result) {
+          contentWithId = result as Content;
+        }
       }
+
+      // Now save merged video and audio to database using the real content ID
+      if ((savedMergedVideos.length > 0 || audioData) && contentWithId.id && contentWithId.id !== 0) {
+        console.log('[Content Preview] Saving media with content ID:', contentWithId.id);
+        await saveMediaToContent(contentWithId.id);
+      }
+
+      setPublishDialogOpen(true);
+    } catch (error) {
+      console.error('Error during approve and publish:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to save media data',
+        variant: 'destructive',
+      });
     }
-    setPublishDialogOpen(true);
+  };
+
+  // Save merged video and audio to content
+  const saveMediaToContent = async (contentId?: number) => {
+    const idToUse = contentId || content.id;
+
+    if (!idToUse || idToUse === 0) {
+      console.log('[Content Preview] No valid content ID, skipping media save');
+      return;
+    }
+
+    console.log('[Content Preview] Saving media for content ID:', idToUse);
+
+    const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+    const token = localStorage.getItem('access_token');
+
+    if (!token) {
+      throw new Error('No authentication token found');
+    }
+
+    // Only make API call if there's media to save
+    if (savedMergedVideos.length === 0 && !audioData) {
+      console.log('[Content Preview] No media to save');
+      return;
+    }
+
+    console.log('[Content Preview] Creating FormData with:', {
+      hasVideo: savedMergedVideos.length > 0,
+      hasAudio: !!audioData?.audio_base64
+    });
+
+    // Create FormData to send files
+    const formData = new FormData();
+
+    // Add merged video file if exists
+    if (savedMergedVideos.length > 0) {
+      const latestVideo = savedMergedVideos[0];
+      formData.append('video_file', latestVideo.blob, 'merged_video.mp4');
+      console.log('[Content Preview] Added video file to FormData');
+    }
+
+    // Add audio file if exists
+    if (audioData?.audio_base64) {
+      // Convert base64 to blob
+      const audioBlob = base64ToBlob(audioData.audio_base64, 'audio/mpeg');
+      formData.append('audio_file', audioBlob, 'generated_audio.mp3');
+      console.log('[Content Preview] Added audio file to FormData');
+    }
+
+    console.log('[Content Preview] Sending request to update-media endpoint...');
+    const response = await fetch(`${API_URL}/api/v1/content/${idToUse}/update-media`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      console.error('[Content Preview] Failed to save media:', errorData);
+      throw new Error(errorData.detail || 'Failed to save media');
+    }
+
+    const result = await response.json();
+    console.log('[Content Preview] Media saved successfully:', result);
+  };
+
+  // Helper function to convert base64 to blob
+  const base64ToBlob = (base64: string, mimeType: string): Blob => {
+    const byteCharacters = atob(base64);
+    const byteArrays = [];
+
+    for (let offset = 0; offset < byteCharacters.length; offset += 512) {
+      const slice = byteCharacters.slice(offset, offset + 512);
+      const byteNumbers = new Array(slice.length);
+
+      for (let i = 0; i < slice.length; i++) {
+        byteNumbers[i] = slice.charCodeAt(i);
+      }
+
+      const byteArray = new Uint8Array(byteNumbers);
+      byteArrays.push(byteArray);
+    }
+
+    return new Blob(byteArrays, { type: mimeType });
   };
 
   // Generate audio from caption

@@ -1,4 +1,15 @@
-from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
+from fastapi import (
+    APIRouter,
+    Depends,
+    HTTPException,
+    status,
+    BackgroundTasks,
+    File,
+    UploadFile,
+    Form,
+    Request,
+)
+from fastapi.exceptions import RequestValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update
 from typing import List, Optional
@@ -8,6 +19,8 @@ import base64
 import tempfile
 import os
 from pathlib import Path
+import uuid
+import aiofiles
 from app.services.video_audio_service import VideoAudioService
 from app.database import get_db
 from app.models.user import User
@@ -104,10 +117,11 @@ class ContentApprovalRequest(BaseModel):
     feedback: Optional[str] = None
 
 
-@router.post(
-    "/generate", response_model=ContentResponse, status_code=status.HTTP_201_CREATED
-)
 class ContentCreateRequest(BaseModel):
+    model_config = {
+        "extra": "ignore"
+    }  # Ignore extra fields like id, created_at, status
+
     topic: str
     facebook_caption: Optional[str] = None
     instagram_caption: Optional[str] = None
@@ -116,6 +130,7 @@ class ContentCreateRequest(BaseModel):
     twitter_caption: Optional[str] = None
     threads_caption: Optional[str] = None
     image_prompt: Optional[str] = None
+    image_caption: Optional[str] = None
     image_url: Optional[str] = None
     auto_approve: bool = False
 
@@ -640,27 +655,11 @@ async def generate_content(
             detail=f"Failed to generate content: {str(e)}",
         )
 
+    # Add this to backend/app/api/v1/content.py
 
-# Add this to backend/app/api/v1/content.py
-
-
-class ContentCreateRequest(BaseModel):
-    topic: str
-    facebook_caption: Optional[str] = None
-    instagram_caption: Optional[str] = None
-    linkedin_caption: Optional[str] = None
-    pinterest_caption: Optional[str] = None
-    twitter_caption: Optional[str] = None
-    threads_caption: Optional[str] = None
-    image_prompt: Optional[str] = None
-    image_caption: Optional[str] = None
-    image_url: Optional[str] = None
     auto_approve: bool = False
 
 
-@router.post(
-    "/create", response_model=ContentResponse, status_code=status.HTTP_201_CREATED
-)
 # Add this schema at the top with other schemas:
 class PromptSummarizeRequest(BaseModel):
     prompt: str
@@ -812,7 +811,15 @@ async def create_content(
     db: AsyncSession = Depends(get_db),
 ):
     """Create and save content (from webhook or manual)."""
+    print(f"\n{'='*80}")
+    print(f"[CREATE_CONTENT] Endpoint hit!")
+    print(f"[CREATE_CONTENT] User: {current_user.email} (ID: {current_user.id})")
+    print(f"[CREATE_CONTENT] Topic: {request.topic}")
+    print(f"[CREATE_CONTENT] Auto approve: {request.auto_approve}")
+    print(f"{'='*80}\n")
+
     try:
+        print("[CREATE_CONTENT] Step 1: Creating Content object...")
         new_content = Content(
             user_id=current_user.id,
             topic=request.topic,
@@ -836,13 +843,33 @@ async def create_content(
                 "created_at": datetime.utcnow().isoformat(),
             },
         )
+        print("[CREATE_CONTENT] Content object created successfully")
+
+        print("[CREATE_CONTENT] Step 2: Adding to database session...")
         db.add(new_content)
+        print("[CREATE_CONTENT] Added to session")
+
+        print("[CREATE_CONTENT] Step 3: Committing to database...")
         await db.commit()
+        print("[CREATE_CONTENT] Commit successful")
+
+        print("[CREATE_CONTENT] Step 4: Refreshing content object...")
         await db.refresh(new_content)
+        print(f"[CREATE_CONTENT] Refresh successful - Content ID: {new_content.id}")
+
+        print(f"[CREATE_CONTENT] ✓ SUCCESS: Content created with ID {new_content.id}")
+        print(f"{'='*80}\n")
 
         return new_content
 
     except Exception as e:
+        print(f"\n[CREATE_CONTENT] ✗ EXCEPTION CAUGHT: {type(e).__name__}")
+        print(f"[CREATE_CONTENT] Error message: {str(e)}")
+        import traceback
+
+        print(f"[CREATE_CONTENT] Traceback:\n{traceback.format_exc()}")
+        print(f"{'='*80}\n")
+
         await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -935,6 +962,153 @@ async def approve_content(
     await db.refresh(content)
 
     return content
+
+
+@router.post("/{content_id}/update-media", response_model=ContentResponse)
+async def update_content_media(
+    content_id: int,
+    video_file: Optional[UploadFile] = File(None),
+    audio_file: Optional[UploadFile] = File(None),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Update content with video and audio files. Saves files to disk and stores only URLs in database."""
+    print(f"\n{'='*80}")
+    print(f"[UPDATE_MEDIA] Starting update_content_media for content_id: {content_id}")
+    print(f"[UPDATE_MEDIA] User: {current_user.email}")
+    print(
+        f"[UPDATE_MEDIA] Video file received: {video_file.filename if video_file else None}"
+    )
+    print(
+        f"[UPDATE_MEDIA] Audio file received: {audio_file.filename if audio_file else None}"
+    )
+    print(f"{'='*80}\n")
+
+    try:
+        print("[UPDATE_MEDIA] Step 1: Fetching content from database...")
+        result = await db.execute(
+            select(Content).where(
+                Content.id == content_id, Content.user_id == current_user.id
+            )
+        )
+        content = result.scalar_one_or_none()
+
+        if not content:
+            print(
+                f"[UPDATE_MEDIA] ERROR: Content not found for id={content_id}, user={current_user.id}"
+            )
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Content not found"
+            )
+
+        print(f"[UPDATE_MEDIA] Content found: {content.id} - {content.topic}")
+
+        # Create videos directory if it doesn't exist
+        print("[UPDATE_MEDIA] Step 2: Creating directories...")
+        videos_dir = Path("uploads/videos")
+        videos_dir.mkdir(parents=True, exist_ok=True)
+        print(f"[UPDATE_MEDIA] Videos directory: {videos_dir.absolute()}")
+
+        # Create audio directory if it doesn't exist
+        audio_dir = Path("uploads/audio")
+        audio_dir.mkdir(parents=True, exist_ok=True)
+        print(f"[UPDATE_MEDIA] Audio directory: {audio_dir.absolute()}")
+
+        # Save video file if provided
+        if video_file:
+            print(f"[UPDATE_MEDIA] Step 3: Processing video file...")
+            print(f"[UPDATE_MEDIA] Video filename: {video_file.filename}")
+            print(f"[UPDATE_MEDIA] Video content type: {video_file.content_type}")
+
+            # Generate unique filename with timestamp (like image saving)
+            timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+            unique_id = str(uuid.uuid4())[:8]
+            file_extension = Path(video_file.filename).suffix or ".mp4"
+            video_filename = (
+                f"{timestamp}_{current_user.id}_{unique_id}{file_extension}"
+            )
+            video_path = videos_dir / video_filename
+            print(f"[UPDATE_MEDIA] Saving video to: {video_path}")
+
+            # Save file to disk (using regular file operations like image)
+            try:
+                with open(video_path, "wb") as f:
+                    content_data = await video_file.read()
+                    print(f"[UPDATE_MEDIA] Video file size: {len(content_data)} bytes")
+                    f.write(content_data)
+                print(f"[UPDATE_MEDIA] Video file saved successfully")
+            except Exception as e:
+                print(f"[UPDATE_MEDIA] ERROR saving video file: {str(e)}")
+                raise
+
+            # Store relative URL (only URL, not data)
+            content.video_url = f"/uploads/videos/{video_filename}"
+            print(f"[UPDATE_MEDIA] Video URL set to: {content.video_url}")
+        else:
+            print("[UPDATE_MEDIA] Step 3: No video file provided, skipping...")
+
+        # Save audio file if provided
+        if audio_file:
+            print(f"[UPDATE_MEDIA] Step 4: Processing audio file...")
+            print(f"[UPDATE_MEDIA] Audio filename: {audio_file.filename}")
+            print(f"[UPDATE_MEDIA] Audio content type: {audio_file.content_type}")
+
+            # Generate unique filename with timestamp (like image saving)
+            timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+            unique_id = str(uuid.uuid4())[:8]
+            file_extension = Path(audio_file.filename).suffix or ".mp3"
+            audio_filename = (
+                f"{timestamp}_{current_user.id}_{unique_id}{file_extension}"
+            )
+            audio_path = audio_dir / audio_filename
+            print(f"[UPDATE_MEDIA] Saving audio to: {audio_path}")
+
+            # Save file to disk (using regular file operations like image)
+            try:
+                with open(audio_path, "wb") as f:
+                    content_data = await audio_file.read()
+                    print(f"[UPDATE_MEDIA] Audio file size: {len(content_data)} bytes")
+                    f.write(content_data)
+                print(f"[UPDATE_MEDIA] Audio file saved successfully")
+            except Exception as e:
+                print(f"[UPDATE_MEDIA] ERROR saving audio file: {str(e)}")
+                raise
+
+            # Store relative URL (only URL, not data)
+            content.audio_url = f"/uploads/audio/{audio_filename}"
+            print(f"[UPDATE_MEDIA] Audio URL set to: {content.audio_url}")
+        else:
+            print("[UPDATE_MEDIA] Step 4: No audio file provided, skipping...")
+
+        # Remove audio_duration parameter since it's not in the model
+        print("[UPDATE_MEDIA] Step 5: Committing to database...")
+        await db.commit()
+        print("[UPDATE_MEDIA] Database commit successful")
+
+        print("[UPDATE_MEDIA] Step 6: Refreshing content object...")
+        await db.refresh(content)
+        print("[UPDATE_MEDIA] Content refresh successful")
+
+        print(f"[UPDATE_MEDIA] ✓ SUCCESS: Media updated for content {content_id}")
+        print(f"[UPDATE_MEDIA] Final video_url: {content.video_url}")
+        print(f"[UPDATE_MEDIA] Final audio_url: {content.audio_url}")
+        print(f"{'='*80}\n")
+
+        return content
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"\n[UPDATE_MEDIA] ✗ EXCEPTION CAUGHT: {type(e).__name__}")
+        print(f"[UPDATE_MEDIA] Error message: {str(e)}")
+        import traceback
+
+        print(f"[UPDATE_MEDIA] Traceback:\n{traceback.format_exc()}")
+        print(f"{'='*80}\n")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to update media: {str(e)}",
+        )
 
 
 @router.delete("/{content_id}", status_code=status.HTTP_204_NO_CONTENT)

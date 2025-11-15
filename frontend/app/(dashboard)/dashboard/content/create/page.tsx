@@ -230,7 +230,7 @@ export default function CreateContentPage() {
     }
   };
 
-  const handleApprove = async (): Promise<boolean> => {
+  const handleApprove = async (): Promise<Content | false> => {
     if (!generatedContent) return false;
 
     try {
@@ -239,32 +239,35 @@ export default function CreateContentPage() {
       const { contentAPI } = await import('@/lib/api');
 
       // Save content to database with auto_approve=true
+      // Don't send id, created_at, status - backend will generate these
       const response = await contentAPI.create({
         topic: generatedContent.topic,
-        facebook_caption: generatedContent.facebook_caption,
-        instagram_caption: generatedContent.instagram_caption,
-        linkedin_caption: generatedContent.linkedin_caption,
-        pinterest_caption: generatedContent.pinterest_caption,
-        twitter_caption: generatedContent.twitter_caption,
-        threads_caption: generatedContent.threads_caption,
-        image_prompt: generatedContent.image_prompt,
-        image_caption: generatedContent.image_caption,
-        image_url: generatedContent.image_url,
+        facebook_caption: generatedContent.facebook_caption || undefined,
+        instagram_caption: generatedContent.instagram_caption || undefined,
+        linkedin_caption: generatedContent.linkedin_caption || undefined,
+        pinterest_caption: generatedContent.pinterest_caption || undefined,
+        twitter_caption: generatedContent.twitter_caption || undefined,
+        threads_caption: generatedContent.threads_caption || undefined,
+        image_prompt: generatedContent.image_prompt || undefined,
+        image_caption: generatedContent.image_caption || undefined,
+        image_url: generatedContent.image_url || undefined,
         auto_approve: true,
       });
 
       console.log('[Approve] Content saved successfully:', response.data);
 
+      const savedContent = response.data as Content;
+
       // Update local state with saved/approved content so the dialog has accurate data
-      setGeneratedContent(response.data as Content);
+      setGeneratedContent(savedContent);
 
       toast({
         title: 'Content approved!',
         description: 'Select platforms to publish your content',
       });
 
-      // Do not navigate; allow ContentPreview to open the publish dialog
-      return true;
+      // Return the saved content with real ID for media saving
+      return savedContent;
     } catch (error) {
       console.error('[Approve] Error saving content:', error);
       toast({
