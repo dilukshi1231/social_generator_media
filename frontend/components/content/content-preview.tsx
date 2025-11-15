@@ -8,6 +8,7 @@ import { useToast } from '@/components/ui/use-toast';
 import type { Content } from '@/types';
 import Image from 'next/image';
 import PublishDialog from '@/components/content/publish-dialog';
+import VideoPreviewModal from '@/components/content/video-preview-modal';
 // Video player component not used here; import removed to fix unused import warnings
 
 // X (Twitter) Icon Component
@@ -70,12 +71,28 @@ export default function ContentPreview({
   const [isLoadingVideos, setIsLoadingVideos] = useState(false);
   const [videoError, setVideoError] = useState<string | null>(null);
 
+  // Video preview modal state
+  const [selectedVideo, setSelectedVideo] = useState<VideoResult | null>(null);
+  const [isVideoModalOpen, setIsVideoModalOpen] = useState(false);
+
   // Audio states
   const [audioData, setAudioData] = useState<AudioData | null>(null);
   const [isGeneratingAudio, setIsGeneratingAudio] = useState(false);
   const [isPlayingAudio, setIsPlayingAudio] = useState(false);
   const [audioElement, setAudioElement] = useState<HTMLAudioElement | null>(null);
   const [selectedVoice, setSelectedVoice] = useState('21m00Tcm4TlvDq8ikWAM');
+
+  // Handler to open video preview modal
+  const handleVideoClick = (video: VideoResult) => {
+    setSelectedVideo(video);
+    setIsVideoModalOpen(true);
+  };
+
+  // Handler to close video preview modal
+  const handleCloseVideoModal = () => {
+    setIsVideoModalOpen(false);
+    setSelectedVideo(null);
+  };
 
   // Memoized fetchVideos function to prevent infinite loops
   const fetchVideos = useCallback(async (searchQuery: string) => {
@@ -518,7 +535,8 @@ export default function ContentPreview({
               {videos.map((video) => (
                 <div
                   key={video.id}
-                  className="group relative rounded-xl overflow-hidden border-2 border-slate-200 hover:border-purple-300 transition-all hover:shadow-lg"
+                  className="group relative rounded-xl overflow-hidden border-2 border-slate-200 hover:border-purple-300 transition-all hover:shadow-lg cursor-pointer"
+                  onClick={() => handleVideoClick(video)}
                 >
                   <div className="relative aspect-[9/16] bg-slate-100">
                     <Image
@@ -529,7 +547,9 @@ export default function ContentPreview({
                       unoptimized
                     />
                     <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                      <Video className="h-10 w-10 text-white" />
+                      <div className="bg-white/90 rounded-full p-3 shadow-lg">
+                        <Play className="h-8 w-8 text-purple-600 fill-purple-600" />
+                      </div>
                     </div>
                     <div className="absolute bottom-2 right-2 bg-black/70 text-white text-xs px-2 py-1 rounded">
                       {Math.floor(video.duration)}s
@@ -544,7 +564,10 @@ export default function ContentPreview({
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={() => window.open(video.video_url, '_blank')}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          window.open(video.video_url, '_blank');
+                        }}
                         className="h-6 px-1.5 shrink-0"
                       >
                         <ExternalLink className="h-3 w-3" />
@@ -800,6 +823,13 @@ export default function ContentPreview({
         open={publishDialogOpen}
         onOpenChange={setPublishDialogOpen}
         content={content}
+      />
+
+      {/* Video Preview Modal */}
+      <VideoPreviewModal
+        isOpen={isVideoModalOpen}
+        onClose={handleCloseVideoModal}
+        video={selectedVideo}
       />
     </div>
   );
