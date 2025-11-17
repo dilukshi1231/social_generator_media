@@ -165,7 +165,7 @@ export default function DashboardContentDetailPage() {
                             Generated Video
                         </CardTitle>
                         <CardDescription>
-                            {content.video_url ? 'Merged video with background' : 'No video available'}
+                            {content.video_url ? '' : 'No video available'}
                         </CardDescription>
                     </CardHeader>
                     <CardContent>
