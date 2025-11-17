@@ -9,6 +9,7 @@ import time
 
 from app.core.config import settings
 from app.database import create_tables
+from app.database import async_engine
 from loguru import logger
 
 # Import routers
@@ -30,6 +31,27 @@ async def lifespan(app: FastAPI):
     if settings.DEBUG:
         logger.info("Creating database tables...")
         await create_tables()
+    else:
+        # In production, verify DB connectivity with retries
+        logger.info("Verifying database connectivity...")
+        import asyncio
+
+        max_retries = 5
+        delay = 2
+        for attempt in range(1, max_retries + 1):
+            try:
+                async with async_engine.connect() as conn:
+                    await conn.execute("SELECT 1")
+                logger.info("Database connectivity OK")
+                break
+            except Exception as e:
+                logger.warning(f"Database connection attempt {attempt} failed: {e}")
+                if attempt == max_retries:
+                    logger.error(
+                        "Could not connect to the database after multiple attempts"
+                    )
+                    raise
+                await asyncio.sleep(delay * attempt)
 
     # Create uploads directory if it doesn't exist
     upload_dir = Path("uploads/images")

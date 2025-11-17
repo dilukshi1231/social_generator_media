@@ -1,8 +1,9 @@
 from pydantic_settings import BaseSettings
-from typing import List
+from typing import List, Optional
 from functools import lru_cache
 from pydantic import ConfigDict
 from pydantic import Field
+
 
 class Settings(BaseSettings):
     # Application
@@ -17,7 +18,14 @@ class Settings(BaseSettings):
 
     # Database
     DATABASE_URL: str
-    DATABASE_URL_SYNC: str
+    # Optional sync URL for Alembic / tools. If not provided, will be derived from DATABASE_URL
+    DATABASE_URL_SYNC: Optional[str] = None
+
+    # Connection pool tuning (production)
+    DB_POOL_SIZE: int = 10
+    DB_MAX_OVERFLOW: int = 20
+    DB_POOL_TIMEOUT: int = 30
+    DB_POOL_RECYCLE: int = 1800
 
     # Redis
     REDIS_URL: str
@@ -83,6 +91,7 @@ class Settings(BaseSettings):
     # Sentry
     SENTRY_DSN: str = ""
     ELEVENLABS_API_KEY: str = ""
+
     @property
     def cors_origins_list(self) -> List[str]:
         return [origin.strip() for origin in self.CORS_ORIGINS.split(",")]
