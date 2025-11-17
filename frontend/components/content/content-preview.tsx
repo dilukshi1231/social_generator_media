@@ -33,6 +33,7 @@ interface ContentPreviewProps {
   onRegenerateCaptions: () => void;
   onRegenerateImage: () => void;
   isLoading?: boolean;
+  onVideoStageChange?: (stage: 'generating' | 'image' | 'videos' | 'done' | 'error') => void;
 }
 
 interface VideoResult {
@@ -65,6 +66,7 @@ export default function ContentPreview({
   onRegenerateCaptions,
   onRegenerateImage,
   isLoading = false,
+  onVideoStageChange,
 }: ContentPreviewProps) {
   const { toast } = useToast();
   const [publishDialogOpen, setPublishDialogOpen] = useState(false);
@@ -131,6 +133,8 @@ export default function ContentPreview({
     setVideoError(null);
 
     try {
+      // Notify parent that video fetching is starting
+      if (typeof onVideoStageChange === 'function') onVideoStageChange('videos');
       const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
       const token = localStorage.getItem('access_token');
 
@@ -169,15 +173,23 @@ export default function ContentPreview({
 
         if (data.videos.length === 0) {
           setVideoError('No portrait videos found for this topic. Try a different search term.');
+          // No videos means we're done but nothing found
+          if (typeof onVideoStageChange === 'function') onVideoStageChange('done');
+        }
+        else {
+          // Successfully fetched videos
+          if (typeof onVideoStageChange === 'function') onVideoStageChange('done');
         }
       } else {
         console.error('[fetchVideos] API returned unsuccessful response:', data);
+        if (typeof onVideoStageChange === 'function') onVideoStageChange('error');
         throw new Error(data.error || 'Failed to fetch videos');
       }
     } catch (error) {
       console.error('[fetchVideos] Error:', error);
       const errorMessage = error instanceof Error ? error.message : 'Failed to fetch videos';
       setVideoError(errorMessage);
+      if (typeof onVideoStageChange === 'function') onVideoStageChange('error');
       toast({
         title: 'Video search failed',
         description: errorMessage,

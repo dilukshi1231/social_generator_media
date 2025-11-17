@@ -9,6 +9,7 @@ import { Label } from '@/components/ui/label';
 import { useToast } from '@/components/ui/use-toast';
 import { Loader2, Sparkles, ArrowLeft } from 'lucide-react';
 import ContentPreview from '@/components/content/content-preview';
+import GenerationProgressModal, { GenerationStage } from '@/components/content/generation-progress-modal';
 import CaptionCustomizer, { CaptionSettings, defaultCaptionSettings } from '@/components/content/caption-customizer';
 import type { Content } from '@/types';
 
@@ -20,6 +21,9 @@ export default function CreateContentPage() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatedContent, setGeneratedContent] = useState<Content | null>(null);
   const [captionSettings, setCaptionSettings] = useState<CaptionSettings>(defaultCaptionSettings);
+  const [progressOpen, setProgressOpen] = useState(false);
+  const [progressStage, setProgressStage] = useState<GenerationStage>('generating');
+  const [progressError, setProgressError] = useState<string | undefined>(undefined);
 
   useEffect(() => {
     console.log('🚀 CreateContentPage component mounted');
@@ -115,6 +119,10 @@ export default function CreateContentPage() {
     }
 
     setIsGenerating(true);
+    // Open progress modal and set initial stage
+    setProgressError(undefined);
+    setProgressStage('generating');
+    setProgressOpen(true);
 
     try {
       // Step 1: Get content from n8n webhook
@@ -169,6 +177,8 @@ export default function CreateContentPage() {
       if (imagePrompt) {
         console.log('[Image] Starting image generation...');
         try {
+          // Notify modal that image generation is starting
+          setProgressStage('image');
           imageUrl = await generateImage(imagePrompt, imageCaption);
           console.log('[Image] Image URL created:', imageUrl);
         } catch (imageError) {
@@ -197,6 +207,10 @@ export default function CreateContentPage() {
       console.log('[Webhook] Created Content object:', content);
 
       setGeneratedContent(content);
+
+      // After content is created we expect ContentPreview to fetch videos.
+      // Move modal to videos stage to indicate that next step is fetching related clips.
+      setProgressStage('videos');
 
       toast({
         title: 'Content generated!',
@@ -563,9 +577,37 @@ export default function CreateContentPage() {
               onRegenerateCaptions={handleRegenerateCaptions}
               onRegenerateImage={handleRegenerateImage}
               isLoading={isGenerating}
+              // Notify the parent page about video fetch progress so modal stages update
+              onVideoStageChange={(stage) => {
+                // If child reports an error, show error state and message
+                if (stage === 'error') {
+                  setProgressStage('error');
+                } else if (stage === 'done') {
+                  setProgressStage('done');
+                  // Auto-close modal shortly after done
+                  setTimeout(() => setProgressOpen(false), 800);
+                } else {
+                  setProgressStage(stage as GenerationStage);
+                }
+              }}
             />
           </div>
         )}
+
+        {/* Generation progress modal (renders regardless of generatedContent so it can show immediately) */}
+        <GenerationProgressModal
+          open={progressOpen}
+          onOpenChange={(open) => {
+            setProgressOpen(open);
+            if (!open) {
+              // reset stage when modal is closed
+              setProgressStage('generating');
+              setProgressError(undefined);
+            }
+          }}
+          stage={progressStage}
+          errorMessage={progressError}
+        />
       </div>
     </div>
   );
