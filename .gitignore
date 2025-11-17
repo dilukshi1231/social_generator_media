@@ -109,6 +109,11 @@ uploads/
 media/
 frontend/public/generated-images/
 
+# Explicitly allow `frontend/lib` to be tracked even though a generic `lib/` pattern exists above
+# This ensures `frontend/lib` is not ignored by the repository-level `lib/` entry.
+!frontend/lib/
+!frontend/lib/**
+
 # Docker
 .dockerignore
 docker-compose.override.yml
