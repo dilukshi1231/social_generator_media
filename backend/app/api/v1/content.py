@@ -21,6 +21,9 @@ import os
 from pathlib import Path
 import uuid
 import aiofiles
+import asyncio
+import subprocess
+import shutil
 from app.services.video_audio_service import VideoAudioService
 from app.database import get_db
 from app.models.user import User
@@ -1081,6 +1084,77 @@ async def update_content_media(
             print(f"[UPDATE_MEDIA] Audio URL set to: {content.audio_url}")
         else:
             print("[UPDATE_MEDIA] Step 4: No audio file provided, skipping...")
+
+        # If both audio and video are present, try to merge them into a single MP4
+        try:
+            if content.video_url and content.audio_url:
+                print(
+                    "[UPDATE_MEDIA] Step 5: Both audio and video present — attempting merge..."
+                )
+
+                # Paths on disk
+                video_disk_path = Path(content.video_url.lstrip("/"))
+                audio_disk_path = Path(content.audio_url.lstrip("/"))
+
+                if video_disk_path.exists() and audio_disk_path.exists():
+                    # Generate merged filename
+                    timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+                    merged_unique = str(uuid.uuid4())[:8]
+                    merged_filename = (
+                        f"{timestamp}_{current_user.id}_{merged_unique}.mp4"
+                    )
+                    merged_path = videos_dir / merged_filename
+
+                    # Ensure ffmpeg available
+                    if not shutil.which("ffmpeg"):
+                        print(
+                            "[UPDATE_MEDIA] ffmpeg not available in PATH — skipping merge"
+                        )
+                    else:
+                        cmd = [
+                            "ffmpeg",
+                            "-y",
+                            "-i",
+                            str(video_disk_path),
+                            "-i",
+                            str(audio_disk_path),
+                            "-c:v",
+                            "copy",
+                            "-c:a",
+                            "aac",
+                            "-map",
+                            "0:v:0",
+                            "-map",
+                            "1:a:0",
+                            "-shortest",
+                            str(merged_path),
+                        ]
+
+                        loop = asyncio.get_running_loop()
+
+                        def run_cmd():
+                            return subprocess.run(
+                                cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE
+                            )
+
+                        proc = await loop.run_in_executor(None, run_cmd)
+
+                        if proc.returncode != 0:
+                            stderr = proc.stderr.decode("utf-8", errors="ignore")
+                            print(f"[UPDATE_MEDIA] ffmpeg merge failed: {stderr}")
+                        else:
+                            # Set merged URL on content
+                            content.video_url = f"/uploads/videos/{merged_filename}"
+                            print(
+                                f"[UPDATE_MEDIA] Merge successful, merged file: {merged_path}"
+                            )
+                else:
+                    print(
+                        "[UPDATE_MEDIA] One of the files for merge does not exist on disk — skipping merge"
+                    )
+
+        except Exception as e:
+            print(f"[UPDATE_MEDIA] Exception during merge step: {str(e)}")
 
         # Remove audio_duration parameter since it's not in the model
         print("[UPDATE_MEDIA] Step 5: Committing to database...")
