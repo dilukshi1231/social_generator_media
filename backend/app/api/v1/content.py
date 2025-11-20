@@ -1118,15 +1118,21 @@ async def update_content_media(
                             str(video_disk_path),
                             "-i",
                             str(audio_disk_path),
-                            "-c:v",
-                            "copy",
-                            "-c:a",
-                            "aac",
+                            # Explicitly map only the video stream from the first input
+                            # and the audio stream from the second input. This discards
+                            # any audio tracks contained in the original video.
                             "-map",
                             "0:v:0",
                             "-map",
                             "1:a:0",
+                            "-c:v",
+                            "copy",
+                            "-c:a",
+                            "aac",
                             "-shortest",
+                            # Enable faststart for web playback
+                            "-movflags",
+                            "+faststart",
                             str(merged_path),
                         ]
 
