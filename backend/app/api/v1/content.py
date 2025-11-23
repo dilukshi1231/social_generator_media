@@ -25,6 +25,7 @@ import asyncio
 import subprocess
 import shutil
 from app.services.video_audio_service import VideoAudioService
+from app.services.subtitle_service import SubtitleService
 from app.database import get_db
 from app.models.user import User
 from app.models.content import Content, ContentStatus
@@ -125,7 +126,7 @@ class ContentApprovalRequest(BaseModel):
 class ContentCreateRequest(BaseModel):
     model_config = {
         "extra": "ignore"
-    }  # Ignore extra fields like id, created_at, status
+    }
 
     topic: str
     facebook_caption: Optional[str] = None
@@ -149,6 +150,32 @@ class ImageGenerateResponse(BaseModel):
     file_path: str
 
 
+class SubtitleGenerateRequest(BaseModel):
+    text: str
+    duration: float
+    filename: str
+
+
+class SubtitleGenerateResponse(BaseModel):
+    success: bool
+    subtitle_url: Optional[str] = None
+    file_path: Optional[str] = None
+    error: Optional[str] = None
+
+
+class PromptSummarizeRequest(BaseModel):
+    prompt: str
+    max_words: int = 50
+
+
+class PromptSummarizeResponse(BaseModel):
+    success: bool
+    summarized_prompt: str
+    original_word_count: int
+    summarized_word_count: int
+    error: Optional[str] = None
+
+
 # ============================================================================
 # VIDEO SEARCH
 # ============================================================================
@@ -168,7 +195,6 @@ async def search_videos(
     print(f"[VIDEO SEARCH] Per page: {request.per_page}")
 
     try:
-        # Step 1: Extract keywords from the prompt
         keyword_extractor = KeywordExtractorService()
         search_keywords = await keyword_extractor.extract_keywords(
             prompt=request.prompt, max_keywords=4
@@ -176,7 +202,6 @@ async def search_videos(
 
         print(f"[VIDEO SEARCH] Extracted keywords: {search_keywords}")
 
-        # Step 2: Search Pexels with the extracted keywords
         pexels = PexelsService()
         result = await pexels.search_videos(
             query=search_keywords, per_page=request.per_page
@@ -228,18 +253,14 @@ async def analyze_video(
         print(f"[Video Analysis] Video URL: {request.video_url}")
         print(f"[Video Analysis] Duration: {request.duration}s")
 
-        # Step 1: Download video temporarily
         video_path = await download_video_temporarily(
             request.video_url, request.video_id
         )
 
-        # Step 2: Extract key frames from video
         frames = await extract_video_frames(video_path, num_frames=5)
 
-        # Step 3: Analyze frames with Gemini Vision (FREE)
         description = await analyze_frames_with_gemini(frames, request.duration)
 
-        # Step 4: Cleanup
         cleanup_temp_files(video_path, frames)
 
         print(f"[Video Analysis] Analysis complete!")
@@ -324,7 +345,6 @@ async def extract_video_frames(video_path: str, num_frames: int = 5) -> list[str
         ret, frame = cap.read()
 
         if ret:
-            # Resize frame to reduce size (max 1024px width)
             height, width = frame.shape[:2]
             if width > 1024:
                 scale = 1024 / width
@@ -332,7 +352,6 @@ async def extract_video_frames(video_path: str, num_frames: int = 5) -> list[str
                 new_height = int(height * scale)
                 frame = cv2.resize(frame, (new_width, new_height))
 
-            # Convert to JPEG with good quality
             _, buffer = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
             frame_base64 = base64.b64encode(buffer).decode("utf-8")
             frames.append(frame_base64)
@@ -350,7 +369,6 @@ async def extract_video_frames(video_path: str, num_frames: int = 5) -> list[str
 async def analyze_frames_with_gemini(frames: list[str], duration: float) -> str:
     """
     Analyze video frames using FREE Google Gemini Vision API.
-    Gemini 2.0 Flash is completely FREE with high rate limits.
     """
     print(f"[Gemini Analysis] Analyzing {len(frames)} frames")
 
@@ -360,7 +378,6 @@ async def analyze_frames_with_gemini(frames: list[str], duration: float) -> str:
             "Get a FREE API key from: https://aistudio.google.com/app/apikey"
         )
 
-    # Create prompt for video description
     prompt = f"""You are a professional video narrator. Analyze these {len(frames)} frames from a {duration:.1f}-second video and create a detailed, engaging narration script.
 
 Your narration should:
@@ -382,17 +399,14 @@ DO NOT:
 
 Create a flowing narrative that describes this video as if you're watching it unfold in real-time."""
 
-    # Prepare content for Gemini
     content_parts = [{"text": prompt}]
 
-    # Add each frame
     for frame_base64 in frames:
         content_parts.append(
             {"inline_data": {"mime_type": "image/jpeg", "data": frame_base64}}
         )
 
     async with httpx.AsyncClient(timeout=120.0) as client:
-        # Using Gemini 2.0 Flash Experimental - FREE with high limits
         url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key={settings.GEMINI_API_KEY}"
 
         payload = {
@@ -427,7 +441,6 @@ Create a flowing narrative that describes this video as if you're watching it un
 
         result = response.json()
 
-        # Extract description
         try:
             candidates = result.get("candidates", [])
             if not candidates:
@@ -463,6 +476,53 @@ def cleanup_temp_files(video_path: str, frames: list[str]):
             print(f"[Cleanup] Removed temp video: {video_path}")
     except Exception as e:
         print(f"[Cleanup] Failed to remove temp files: {str(e)}")
+
+
+# ============================================================================
+# SUBTITLE GENERATION
+# ============================================================================
+
+
+@router.post("/generate-subtitles", response_model=SubtitleGenerateResponse)
+async def generate_subtitles(
+    request: SubtitleGenerateRequest,
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Generate WebVTT subtitle file from narration text.
+    """
+    try:
+        print(f"[Subtitles] Generating subtitles for user: {current_user.email}")
+        print(f"[Subtitles] Text length: {len(request.text)} chars")
+        print(f"[Subtitles] Duration: {request.duration}s")
+        print(f"[Subtitles] Filename: {request.filename}")
+        
+        service = SubtitleService()
+        
+        result = await service.generate_vtt_file_only(
+            text=request.text,
+            duration=request.duration,
+            output_filename=request.filename
+        )
+        
+        if result.get("success"):
+            print(f"[Subtitles] ✅ Subtitle file generated: {result['subtitle_url']}")
+            return SubtitleGenerateResponse(**result)
+        else:
+            print(f"[Subtitles] ❌ Generation failed: {result.get('error')}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=result.get("error", "Failed to generate subtitles")
+            )
+    
+    except Exception as e:
+        print(f"[Subtitles] Exception: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to generate subtitles: {str(e)}"
+        )
 
 
 # ============================================================================
@@ -524,7 +584,6 @@ async def generate_audio_for_content_caption(
 ):
     """
     Generate audio from a specific content's caption.
-    Automatically cleans and processes the caption for audio generation.
     """
     result = await db.execute(
         select(Content).where(
@@ -603,6 +662,88 @@ async def get_available_voices(
         )
 
 
+@router.post("/analyze-video-with-narration", response_model=dict)
+async def analyze_video_with_narration(
+    video_url: str,
+    video_id: int,
+    duration: float,
+    voice_id: str = "21m00Tcm4TlvDq8ikWAM",
+    generate_subtitles: bool = True,
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Complete video analysis with AI narration generation and optional subtitles.
+    """
+    try:
+        print(f"[Video + Audio + Subtitles] Starting analysis for video {video_id}")
+        print(f"[Video + Audio + Subtitles] Video URL: {video_url}")
+        print(f"[Video + Audio + Subtitles] Duration: {duration}s")
+        print(f"[Video + Audio + Subtitles] Voice ID: {voice_id}")
+        print(f"[Video + Audio + Subtitles] Generate subtitles: {generate_subtitles}")
+
+        service = VideoAudioService()
+
+        result = await service.analyze_video_and_generate_narration(
+            video_url=video_url, 
+            video_id=video_id, 
+            duration=duration, 
+            voice_id=voice_id
+        )
+
+        if not result.get("success"):
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=result.get("error", "Failed to analyze video and generate narration"),
+            )
+
+        # Generate subtitles if requested
+        subtitle_url = None
+        if generate_subtitles:
+            print(f"[Video + Audio + Subtitles] Generating subtitle file...")
+            subtitle_service = SubtitleService()
+            
+            subtitle_filename = f"video_{video_id}_{current_user.id}_{int(duration)}.vtt"
+            subtitle_result = await subtitle_service.generate_vtt_file_only(
+                text=result["description"],
+                duration=duration,
+                output_filename=subtitle_filename
+            )
+            
+            if subtitle_result.get("success"):
+                subtitle_url = subtitle_result["subtitle_url"]
+                print(f"[Video + Audio + Subtitles] ✅ Subtitles generated: {subtitle_url}")
+            else:
+                print(f"[Video + Audio + Subtitles] ⚠️ Subtitle generation failed: {subtitle_result.get('error')}")
+
+        print(f"[Video + Audio + Subtitles] Complete!")
+
+        return {
+            "success": True,
+            "video_id": video_id,
+            "description": result["description"],
+            "audio_data_url": result["audio_data_url"],
+            "audio_base64": result["audio_base64"],
+            "size_bytes": result["size_bytes"],
+            "voice_id": result["voice_id"],
+            "subtitle_url": subtitle_url,
+            "analysis_details": {
+                "frames_analyzed": result["frames_analyzed"],
+                "duration": result["duration"],
+                "has_subtitles": subtitle_url is not None
+            },
+        }
+
+    except Exception as e:
+        print(f"[Video + Audio + Subtitles] Error: {str(e)}")
+        import traceback
+        traceback.print_exc()
+
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to analyze video and generate narration: {str(e)}",
+        )
+
+
 # ============================================================================
 # CONTENT GENERATION
 # ============================================================================
@@ -660,26 +801,7 @@ async def generate_content(
             detail=f"Failed to generate content: {str(e)}",
         )
 
-    # Add this to backend/app/api/v1/content.py
 
-    auto_approve: bool = False
-
-
-# Add this schema at the top with other schemas:
-class PromptSummarizeRequest(BaseModel):
-    prompt: str
-    max_words: int = 50
-
-
-class PromptSummarizeResponse(BaseModel):
-    success: bool
-    summarized_prompt: str
-    original_word_count: int
-    summarized_word_count: int
-    error: Optional[str] = None
-
-
-# Add this endpoint after the other content endpoints:
 @router.post("/summarize-prompt", response_model=PromptSummarizeResponse)
 async def summarize_prompt(
     request: PromptSummarizeRequest,
@@ -687,17 +809,14 @@ async def summarize_prompt(
 ):
     """
     Summarize a long video prompt to a specified word count using Gemini AI.
-    Useful for creating concise voiceover scripts.
     """
     try:
         print(f"[Summarize Prompt] User: {current_user.email}")
         print(f"[Summarize Prompt] Original prompt length: {len(request.prompt)} chars")
         print(f"[Summarize Prompt] Target max words: {request.max_words}")
 
-        # Count original words
         original_word_count = len(request.prompt.split())
 
-        # If already short enough, return as-is
         if original_word_count <= request.max_words:
             print(
                 f"[Summarize Prompt] Prompt already short enough ({original_word_count} words)"
@@ -709,14 +828,12 @@ async def summarize_prompt(
                 summarized_word_count=original_word_count,
             )
 
-        # Check API key
         if not settings.GEMINI_API_KEY or settings.GEMINI_API_KEY.strip() == "":
             raise ValueError(
                 "GEMINI_API_KEY is not configured. "
                 "Get a FREE API key from: https://aistudio.google.com/app/apikey"
             )
 
-        # Create summarization prompt for Gemini
         summarization_prompt = f"""Summarize this video prompt into EXACTLY {request.max_words} words or less while keeping the key visual concepts and essence.
 
 Original prompt:
@@ -737,7 +854,7 @@ Return ONLY the summarized prompt, nothing else."""
             payload = {
                 "contents": [{"parts": [{"text": summarization_prompt}]}],
                 "generationConfig": {
-                    "temperature": 0.4,  # Lower for more focused output
+                    "temperature": 0.4,
                     "maxOutputTokens": 200,
                     "topP": 0.8,
                     "topK": 40,
@@ -751,7 +868,6 @@ Return ONLY the summarized prompt, nothing else."""
 
             result = response.json()
 
-            # Extract summarized text
             candidates = result.get("candidates", [])
             if not candidates:
                 raise ValueError("No candidates in Gemini response")
@@ -767,15 +883,11 @@ Return ONLY the summarized prompt, nothing else."""
             if not summarized_prompt:
                 raise ValueError("No text content in Gemini response")
 
-            # Count summarized words
             summarized_word_count = len(summarized_prompt.split())
 
             print(f"[Summarize Prompt] Success!")
             print(f"[Summarize Prompt] Original: {original_word_count} words")
             print(f"[Summarize Prompt] Summarized: {summarized_word_count} words")
-            print(
-                f"[Summarize Prompt] Reduction: {((original_word_count - summarized_word_count) / original_word_count * 100):.1f}%"
-            )
 
             return PromptSummarizeResponse(
                 success=True,
@@ -788,7 +900,7 @@ Return ONLY the summarized prompt, nothing else."""
         print(f"[Summarize Prompt] ValueError: {str(e)}")
         return PromptSummarizeResponse(
             success=False,
-            summarized_prompt=request.prompt[:200] + "...",  # Fallback
+            summarized_prompt=request.prompt[:200] + "...",
             original_word_count=len(request.prompt.split()),
             summarized_word_count=len(request.prompt[:200].split()),
             error=str(e),
@@ -796,11 +908,10 @@ Return ONLY the summarized prompt, nothing else."""
     except Exception as e:
         print(f"[Summarize Prompt] Exception: {str(e)}")
         import traceback
-
         traceback.print_exc()
         return PromptSummarizeResponse(
             success=False,
-            summarized_prompt=request.prompt[:200] + "...",  # Fallback
+            summarized_prompt=request.prompt[:200] + "...",
             original_word_count=len(request.prompt.split()),
             summarized_word_count=len(request.prompt[:200].split()),
             error=f"Failed to summarize prompt: {str(e)}",
@@ -862,13 +973,13 @@ async def create_content(
         await db.refresh(new_content)
         print(f"[CREATE_CONTENT] Refresh successful - Content ID: {new_content.id}")
 
-        print(f"[CREATE_CONTENT] ✓ SUCCESS: Content created with ID {new_content.id}")
+        print(f"[CREATE_CONTENT] ✅ SUCCESS: Content created with ID {new_content.id}")
         print(f"{'='*80}\n")
 
         return new_content
 
     except Exception as e:
-        print(f"\n[CREATE_CONTENT] ✗ EXCEPTION CAUGHT: {type(e).__name__}")
+        print(f"\n[CREATE_CONTENT] ❌ EXCEPTION CAUGHT: {type(e).__name__}")
         print(f"[CREATE_CONTENT] Error message: {str(e)}")
         import traceback
 
@@ -958,7 +1069,6 @@ async def approve_content(
                 extra = {}
             extra["rejection_feedback"] = approval.feedback
 
-            # Use an explicit UPDATE statement to ensure JSON is persisted
             await db.execute(
                 update(Content).where(Content.id == content_id).values(extra_data=extra)
             )
@@ -977,7 +1087,7 @@ async def update_content_media(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Update content with video and audio files. Saves files to disk and stores only URLs in database."""
+    """Update content with video and audio files."""
     print(f"\n{'='*80}")
     print(f"[UPDATE_MEDIA] Starting update_content_media for content_id: {content_id}")
     print(f"[UPDATE_MEDIA] User: {current_user.email}")
@@ -1008,24 +1118,20 @@ async def update_content_media(
 
         print(f"[UPDATE_MEDIA] Content found: {content.id} - {content.topic}")
 
-        # Create videos directory if it doesn't exist
         print("[UPDATE_MEDIA] Step 2: Creating directories...")
         videos_dir = Path("uploads/videos")
         videos_dir.mkdir(parents=True, exist_ok=True)
         print(f"[UPDATE_MEDIA] Videos directory: {videos_dir.absolute()}")
 
-        # Create audio directory if it doesn't exist
         audio_dir = Path("uploads/audio")
         audio_dir.mkdir(parents=True, exist_ok=True)
         print(f"[UPDATE_MEDIA] Audio directory: {audio_dir.absolute()}")
 
-        # Save video file if provided
         if video_file:
             print(f"[UPDATE_MEDIA] Step 3: Processing video file...")
             print(f"[UPDATE_MEDIA] Video filename: {video_file.filename}")
             print(f"[UPDATE_MEDIA] Video content type: {video_file.content_type}")
 
-            # Generate unique filename with timestamp (like image saving)
             timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
             unique_id = str(uuid.uuid4())[:8]
             file_extension = Path(video_file.filename).suffix or ".mp4"
@@ -1035,7 +1141,6 @@ async def update_content_media(
             video_path = videos_dir / video_filename
             print(f"[UPDATE_MEDIA] Saving video to: {video_path}")
 
-            # Save file to disk (using regular file operations like image)
             try:
                 with open(video_path, "wb") as f:
                     content_data = await video_file.read()
@@ -1046,19 +1151,16 @@ async def update_content_media(
                 print(f"[UPDATE_MEDIA] ERROR saving video file: {str(e)}")
                 raise
 
-            # Store relative URL (only URL, not data)
             content.video_url = f"/uploads/videos/{video_filename}"
             print(f"[UPDATE_MEDIA] Video URL set to: {content.video_url}")
         else:
             print("[UPDATE_MEDIA] Step 3: No video file provided, skipping...")
 
-        # Save audio file if provided
         if audio_file:
             print(f"[UPDATE_MEDIA] Step 4: Processing audio file...")
             print(f"[UPDATE_MEDIA] Audio filename: {audio_file.filename}")
             print(f"[UPDATE_MEDIA] Audio content type: {audio_file.content_type}")
 
-            # Generate unique filename with timestamp (like image saving)
             timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
             unique_id = str(uuid.uuid4())[:8]
             file_extension = Path(audio_file.filename).suffix or ".mp3"
@@ -1068,7 +1170,6 @@ async def update_content_media(
             audio_path = audio_dir / audio_filename
             print(f"[UPDATE_MEDIA] Saving audio to: {audio_path}")
 
-            # Save file to disk (using regular file operations like image)
             try:
                 with open(audio_path, "wb") as f:
                     content_data = await audio_file.read()
@@ -1079,25 +1180,21 @@ async def update_content_media(
                 print(f"[UPDATE_MEDIA] ERROR saving audio file: {str(e)}")
                 raise
 
-            # Store relative URL (only URL, not data)
             content.audio_url = f"/uploads/audio/{audio_filename}"
             print(f"[UPDATE_MEDIA] Audio URL set to: {content.audio_url}")
         else:
             print("[UPDATE_MEDIA] Step 4: No audio file provided, skipping...")
 
-        # If both audio and video are present, try to merge them into a single MP4
         try:
             if content.video_url and content.audio_url:
                 print(
-                    "[UPDATE_MEDIA] Step 5: Both audio and video present — attempting merge..."
+                    "[UPDATE_MEDIA] Step 5: Both audio and video present – attempting merge..."
                 )
 
-                # Paths on disk
                 video_disk_path = Path(content.video_url.lstrip("/"))
                 audio_disk_path = Path(content.audio_url.lstrip("/"))
 
                 if video_disk_path.exists() and audio_disk_path.exists():
-                    # Generate merged filename
                     timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
                     merged_unique = str(uuid.uuid4())[:8]
                     merged_filename = (
@@ -1105,10 +1202,9 @@ async def update_content_media(
                     )
                     merged_path = videos_dir / merged_filename
 
-                    # Ensure ffmpeg available
                     if not shutil.which("ffmpeg"):
                         print(
-                            "[UPDATE_MEDIA] ffmpeg not available in PATH — skipping merge"
+                            "[UPDATE_MEDIA] ffmpeg not available in PATH – skipping merge"
                         )
                     else:
                         cmd = [
@@ -1118,9 +1214,6 @@ async def update_content_media(
                             str(video_disk_path),
                             "-i",
                             str(audio_disk_path),
-                            # Explicitly map only the video stream from the first input
-                            # and the audio stream from the second input. This discards
-                            # any audio tracks contained in the original video.
                             "-map",
                             "0:v:0",
                             "-map",
@@ -1130,7 +1223,6 @@ async def update_content_media(
                             "-c:a",
                             "aac",
                             "-shortest",
-                            # Enable faststart for web playback
                             "-movflags",
                             "+faststart",
                             str(merged_path),
@@ -1149,20 +1241,18 @@ async def update_content_media(
                             stderr = proc.stderr.decode("utf-8", errors="ignore")
                             print(f"[UPDATE_MEDIA] ffmpeg merge failed: {stderr}")
                         else:
-                            # Set merged URL on content
                             content.video_url = f"/uploads/videos/{merged_filename}"
                             print(
                                 f"[UPDATE_MEDIA] Merge successful, merged file: {merged_path}"
                             )
                 else:
                     print(
-                        "[UPDATE_MEDIA] One of the files for merge does not exist on disk — skipping merge"
+                        "[UPDATE_MEDIA] One of the files for merge does not exist on disk – skipping merge"
                     )
 
         except Exception as e:
             print(f"[UPDATE_MEDIA] Exception during merge step: {str(e)}")
 
-        # Remove audio_duration parameter since it's not in the model
         print("[UPDATE_MEDIA] Step 5: Committing to database...")
         await db.commit()
         print("[UPDATE_MEDIA] Database commit successful")
@@ -1171,7 +1261,7 @@ async def update_content_media(
         await db.refresh(content)
         print("[UPDATE_MEDIA] Content refresh successful")
 
-        print(f"[UPDATE_MEDIA] ✓ SUCCESS: Media updated for content {content_id}")
+        print(f"[UPDATE_MEDIA] ✅ SUCCESS: Media updated for content {content_id}")
         print(f"[UPDATE_MEDIA] Final video_url: {content.video_url}")
         print(f"[UPDATE_MEDIA] Final audio_url: {content.audio_url}")
         print(f"{'='*80}\n")
@@ -1181,7 +1271,7 @@ async def update_content_media(
     except HTTPException:
         raise
     except Exception as e:
-        print(f"\n[UPDATE_MEDIA] ✗ EXCEPTION CAUGHT: {type(e).__name__}")
+        print(f"\n[UPDATE_MEDIA] ❌ EXCEPTION CAUGHT: {type(e).__name__}")
         print(f"[UPDATE_MEDIA] Error message: {str(e)}")
         import traceback
 
@@ -1242,7 +1332,6 @@ async def regenerate_image(
     try:
         image_data = await generator.generate_image_from_prompt(content.image_prompt)
 
-        # Update content
         content.image_data = (
             image_data.split(",")[1] if image_data and "," in image_data else None
         )
@@ -1328,8 +1417,6 @@ async def generate_image_proxy(
 ):
     """
     Proxy endpoint to generate images using Cloudflare Worker.
-    This avoids CORS issues by making the request from the backend.
-    Saves the image to disk and returns the file path.
     """
     import uuid
 
@@ -1358,21 +1445,17 @@ async def generate_image_proxy(
                     detail=f"Image generation failed: {response.text}",
                 )
 
-            # Create uploads directory if it doesn't exist
             upload_dir = Path("uploads/images")
             upload_dir.mkdir(parents=True, exist_ok=True)
 
-            # Generate unique filename
             timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
             unique_id = str(uuid.uuid4())[:8]
             filename = f"{timestamp}_{current_user.id}_{unique_id}.jpg"
             file_path = upload_dir / filename
 
-            # Save image to disk
             with open(file_path, "wb") as f:
                 f.write(response.content)
 
-            # Return relative path for database storage
             relative_path = f"uploads/images/{filename}"
             image_url = f"/uploads/images/{filename}"
 
@@ -1393,19 +1476,15 @@ async def generate_image_proxy(
 class EmbedCaptionRequest(BaseModel):
     image_url: str
     caption: str
-    position: str = "bottom"  # top, bottom, or center
+    position: str = "bottom"
     font_size: int = 40
-    # Text styling
-    text_color: str = "#FFFFFF"  # Hex color for text
-    text_opacity: int = 255  # 0-255
-    # Background styling
-    bg_color: str = "#000000"  # Hex color for background
-    bg_opacity: int = 180  # 0-255
-    # Layout
+    text_color: str = "#FFFFFF"
+    text_opacity: int = 255
+    bg_color: str = "#000000"
+    bg_opacity: int = 180
     padding: int = 20
-    max_width_ratio: float = 0.9  # Ratio of image width for text
-    # Font options
-    font_family: str = "default"  # default, arial, segoe, etc.
+    max_width_ratio: float = 0.9
+    font_family: str = "default"
 
 
 class EmbedCaptionResponse(BaseModel):
@@ -1421,23 +1500,17 @@ async def embed_caption_on_image(
 ):
     """
     Embed a caption on an existing image.
-
-    Takes an image URL (must be a local file), adds the caption text overlay,
-    and returns the path to the modified image.
     """
     from pathlib import Path
     from app.utils.image_utils import embed_caption_on_image as embed_caption
 
     try:
-        # Extract the file path from the URL
-        # Expected format: /uploads/images/filename.jpg
         if not request.image_url.startswith("/uploads/images/"):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Invalid image URL. Must be a local upload.",
             )
 
-        # Convert URL to file path
         relative_path = request.image_url.lstrip("/")
         file_path = Path(relative_path)
 
@@ -1447,25 +1520,21 @@ async def embed_caption_on_image(
                 detail=f"Image file not found: {request.image_url}",
             )
 
-        # Validate position
         valid_positions = ["top", "bottom", "center"]
         position = request.position.lower()
         if position not in valid_positions:
             position = "bottom"
 
-        # Convert hex colors to RGBA tuples
         def hex_to_rgba(hex_color: str, opacity: int) -> tuple:
-            """Convert hex color and opacity to RGBA tuple."""
             hex_color = hex_color.lstrip("#")
             if len(hex_color) == 6:
                 r, g, b = tuple(int(hex_color[i : i + 2], 16) for i in (0, 2, 4))
                 return (r, g, b, opacity)
-            return (255, 255, 255, opacity)  # Default to white
+            return (255, 255, 255, opacity)
 
         text_color = hex_to_rgba(request.text_color, request.text_opacity)
         bg_color = hex_to_rgba(request.bg_color, request.bg_opacity)
 
-        # Embed the caption on the image with all custom options
         result_path = embed_caption(
             image_path=str(file_path),
             caption=request.caption,
@@ -1478,7 +1547,6 @@ async def embed_caption_on_image(
             font_family=request.font_family,
         )
 
-        # Return the same URL (image is modified in place)
         return EmbedCaptionResponse(
             image_url=request.image_url,
             file_path=relative_path,
@@ -1498,72 +1566,4 @@ async def embed_caption_on_image(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to embed caption: {str(e)}",
-        )
-
-
-@router.post("/analyze-video-with-narration", response_model=dict)
-async def analyze_video_with_narration(
-    video_url: str,
-    video_id: int,
-    duration: float,
-    voice_id: str = "21m00Tcm4TlvDq8ikWAM",
-    current_user: User = Depends(get_current_user),
-):
-    """
-    Complete video analysis with AI narration generation.
-    This endpoint:
-    1. Downloads the video temporarily
-    2. Extracts key frames
-    3. Analyzes frames with Gemini Vision
-    4. Generates audio narration with ElevenLabs
-    5. Returns both description and audio
-    """
-    try:
-        print(f"[Video + Audio] Starting complete analysis for video {video_id}")
-        print(f"[Video + Audio] Video URL: {video_url}")
-        print(f"[Video + Audio] Duration: {duration}s")
-        print(f"[Video + Audio] Voice ID: {voice_id}")
-
-        service = VideoAudioService()
-
-        result = await service.analyze_video_and_generate_narration(
-            video_url=video_url, video_id=video_id, duration=duration, voice_id=voice_id
-        )
-
-        if not result.get("success"):
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=result.get(
-                    "error", "Failed to analyze video and generate narration"
-                ),
-            )
-
-        print(
-            f"[Video + Audio] Complete! Description: {len(result['description'])} chars"
-        )
-        print(f"[Video + Audio] Audio: {result['size_bytes']} bytes")
-
-        return {
-            "success": True,
-            "video_id": video_id,
-            "description": result["description"],
-            "audio_data_url": result["audio_data_url"],
-            "audio_base64": result["audio_base64"],
-            "size_bytes": result["size_bytes"],
-            "voice_id": result["voice_id"],
-            "analysis_details": {
-                "frames_analyzed": result["frames_analyzed"],
-                "duration": result["duration"],
-            },
-        }
-
-    except Exception as e:
-        print(f"[Video + Audio] Error: {str(e)}")
-        import traceback
-
-        traceback.print_exc()
-
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to analyze video and generate narration: {str(e)}",
         )

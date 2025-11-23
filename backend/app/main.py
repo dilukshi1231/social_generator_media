@@ -46,6 +46,11 @@ async def lifespan(app: FastAPI):
     audio_dir.mkdir(parents=True, exist_ok=True)
     logger.info(f"Audio directory ready: {audio_dir.absolute()}")
 
+    # Create subtitles directory
+    subtitles_dir = Path("uploads/subtitles")
+    subtitles_dir.mkdir(parents=True, exist_ok=True)
+    logger.info(f"Subtitles directory ready: {subtitles_dir.absolute()}")
+
     yield
 
     # Shutdown
@@ -142,13 +147,13 @@ app.include_router(auth.router, prefix="/api/v1/auth", tags=["Authentication"])
 app.include_router(content.router, prefix="/api/v1/content", tags=["Content"])
 app.include_router(
     social_accounts.router, prefix="/api/v1/social-accounts", tags=["Social Accounts"]
-)  # ADD THIS
-app.include_router(posts.router, prefix="/api/v1/posts", tags=["Posts"])  # ADD THIS
+)
+app.include_router(posts.router, prefix="/api/v1/posts", tags=["Posts"])
 app.include_router(
     oauth_routes.router, prefix="/api/v1/oauth", tags=["OAuth"]
-)  # New OAuth routes
+)
 
-# Mount static files for serving uploaded images
+# Mount static files for serving uploaded images, videos, audio, and subtitles
 app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
 
