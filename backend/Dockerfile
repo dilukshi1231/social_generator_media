@@ -24,11 +24,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy only requirements first (for better caching)
-COPY requirements-prod.txt requirements.txt ./
+COPY requirements.txt ./
 
 # Install Python dependencies
 RUN pip install --upgrade pip setuptools wheel && \
-    pip install --user --no-warn-script-location -r requirements-prod.txt
+    pip install --user --no-warn-script-location -r requirements.txt
 
 # -----------------------------------------------------------------------------
 # Stage 2: Runtime - Minimal production image

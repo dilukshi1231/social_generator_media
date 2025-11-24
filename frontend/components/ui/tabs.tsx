@@ -5,7 +5,9 @@ import * as TabsPrimitive from "@radix-ui/react-tabs";
 import { cn } from "@/lib/utils";
 
 export const Tabs = TabsPrimitive.Root;
-export const TabsList = React.forwardRef<any, any>(({ className, ...props }, ref) => (
+
+type TabsListProps = React.ComponentPropsWithoutRef<typeof TabsPrimitive.List>;
+export const TabsList = React.forwardRef<HTMLDivElement, TabsListProps>(({ className, ...props }, ref) => (
   <TabsPrimitive.List
     ref={ref}
     className={cn(
@@ -17,7 +19,8 @@ export const TabsList = React.forwardRef<any, any>(({ className, ...props }, ref
 ));
 TabsList.displayName = "TabsList";
 
-export const TabsTrigger = React.forwardRef<any, any>(({ className, ...props }, ref) => (
+type TabsTriggerProps = React.ComponentPropsWithoutRef<typeof TabsPrimitive.Trigger>;
+export const TabsTrigger = React.forwardRef<HTMLButtonElement, TabsTriggerProps>(({ className, ...props }, ref) => (
   <TabsPrimitive.Trigger
     ref={ref}
     className={cn(
@@ -29,7 +32,8 @@ export const TabsTrigger = React.forwardRef<any, any>(({ className, ...props }, 
 ));
 TabsTrigger.displayName = "TabsTrigger";
 
-export const TabsContent = React.forwardRef<any, any>(({ className, ...props }, ref) => (
+type TabsContentProps = React.ComponentPropsWithoutRef<typeof TabsPrimitive.Content>;
+export const TabsContent = React.forwardRef<HTMLDivElement, TabsContentProps>(({ className, ...props }, ref) => (
   <TabsPrimitive.Content
     ref={ref}
     className={cn("mt-2 rounded-lg border border-gray-200 p-4", className)}

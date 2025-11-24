@@ -16,7 +16,7 @@ services:
     networks:
       - app_network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: [ "CMD-SHELL", "pg_isready -U postgres" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -32,7 +32,7 @@ services:
     networks:
       - app_network
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: [ "CMD", "redis-cli", "ping" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -40,14 +40,12 @@ services:
   # FastAPI Backend
   backend:
     build:
-      context: .
+      context: ./backend
       dockerfile: Dockerfile
     container_name: social_media_backend
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 4
     ports:
       - "8000:8000"
-    volumes:
-      - .:/app
     environment:
       - DATABASE_URL=postgresql+asyncpg://postgres:postgres@postgres:5432/social_media_db
       - DATABASE_URL_SYNC=postgresql://postgres:postgres@postgres:5432/social_media_db
@@ -55,7 +53,7 @@ services:
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
     env_file:
-      - .env
+      - backend/.env
     depends_on:
       postgres:
         condition: service_healthy
@@ -63,51 +61,51 @@ services:
         condition: service_healthy
     networks:
       - app_network
+    restart: unless-stopped
 
   # Celery Worker
   celery_worker:
     build:
-      context: .
+      context: ./backend
       dockerfile: Dockerfile
     container_name: social_media_celery_worker
     command: celery -A app.celery_app worker --loglevel=info
-    volumes:
-      - .:/app
     environment:
       - DATABASE_URL=postgresql+asyncpg://postgres:postgres@postgres:5432/social_media_db
       - REDIS_URL=redis://redis:6379/0
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
     env_file:
-      - .env
+      - backend/.env
     depends_on:
       - postgres
       - redis
     networks:
       - app_network
+    restart: unless-stopped
 
   # Celery Beat (for scheduled tasks)
   celery_beat:
     build:
-      context: .
+      context: ./backend
       dockerfile: Dockerfile
     container_name: social_media_celery_beat
     command: celery -A app.celery_app beat --loglevel=info
-    volumes:
-      - .:/app
     environment:
       - REDIS_URL=redis://redis:6379/0
       - CELERY_BROKER_URL=redis://redis:6379/0
     env_file:
-      - .env
+      - backend/.env
     depends_on:
       - redis
     networks:
       - app_network
+    restart: unless-stopped
 
 volumes:
   postgres_data:
   redis_data:
+
 
 networks:
   app_network:

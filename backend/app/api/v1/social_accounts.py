@@ -5,6 +5,7 @@ from typing import List, Optional, Dict
 from datetime import datetime, timedelta
 from pydantic import BaseModel
 import httpx
+from loguru import logger
 
 from app.database import get_db
 from app.models.user import User
@@ -54,7 +55,9 @@ class SocialAccountResponse(BaseModel):
         from_attributes = True
 
 
-@router.post("/", response_model=SocialAccountResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/", response_model=SocialAccountResponse, status_code=status.HTTP_201_CREATED
+)
 async def connect_social_account(
     account_data: SocialAccountCreate,
     current_user: User = Depends(get_current_user),
@@ -130,12 +133,16 @@ async def get_social_account(
 ):
     """Get specific social media account."""
     result = await db.execute(
-        select(SocialAccount).where(SocialAccount.id == account_id, SocialAccount.user_id == current_user.id)
+        select(SocialAccount).where(
+            SocialAccount.id == account_id, SocialAccount.user_id == current_user.id
+        )
     )
     account = result.scalar_one_or_none()
 
     if not account:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Social account not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Social account not found"
+        )
 
     return account
 
@@ -149,12 +156,16 @@ async def update_social_account(
 ):
     """Update social media account details."""
     result = await db.execute(
-        select(SocialAccount).where(SocialAccount.id == account_id, SocialAccount.user_id == current_user.id)
+        select(SocialAccount).where(
+            SocialAccount.id == account_id, SocialAccount.user_id == current_user.id
+        )
     )
     account = result.scalar_one_or_none()
 
     if not account:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Social account not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Social account not found"
+        )
 
     # Update fields
     if update_data.access_token is not None:
@@ -183,12 +194,16 @@ async def disconnect_social_account(
 ):
     """Disconnect/delete a social media account."""
     result = await db.execute(
-        select(SocialAccount).where(SocialAccount.id == account_id, SocialAccount.user_id == current_user.id)
+        select(SocialAccount).where(
+            SocialAccount.id == account_id, SocialAccount.user_id == current_user.id
+        )
     )
     account = result.scalar_one_or_none()
 
     if not account:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Social account not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Social account not found"
+        )
 
     await db.delete(account)
     await db.commit()
@@ -204,15 +219,21 @@ async def refresh_account_token(
 ):
     """Refresh access token for a social media account."""
     result = await db.execute(
-        select(SocialAccount).where(SocialAccount.id == account_id, SocialAccount.user_id == current_user.id)
+        select(SocialAccount).where(
+            SocialAccount.id == account_id, SocialAccount.user_id == current_user.id
+        )
     )
     account = result.scalar_one_or_none()
 
     if not account:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Social account not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Social account not found"
+        )
 
-    # TODO: Implement platform-specific token refresh logic
-    # This would call the respective OAuth provider's token refresh endpoint
+    # Platform-specific token refresh not implemented here
+    logger.warning(
+        "refresh_account_token called but not implemented", account_id=account_id
+    )
 
     raise HTTPException(
         status_code=status.HTTP_501_NOT_IMPLEMENTED,
@@ -264,12 +285,16 @@ async def verify_account_connection(
     import httpx
 
     result = await db.execute(
-        select(SocialAccount).where(SocialAccount.id == account_id, SocialAccount.user_id == current_user.id)
+        select(SocialAccount).where(
+            SocialAccount.id == account_id, SocialAccount.user_id == current_user.id
+        )
     )
     account = result.scalar_one_or_none()
 
     if not account:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Social account not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Social account not found"
+        )
 
     # Verify based on platform
     try:
@@ -324,15 +349,22 @@ async def verify_account_connection(
                     "valid": True,
                     "platform": account.platform,
                     "user_id": user_data.get("data", {}).get("user", {}).get("open_id"),
-                    "display_name": user_data.get("data", {}).get("user", {}).get("display_name"),
+                    "display_name": user_data.get("data", {})
+                    .get("user", {})
+                    .get("display_name"),
                     "message": "Connection is active and valid",
                 }
 
         elif account.platform == PlatformType.INSTAGRAM:
             async with httpx.AsyncClient(timeout=10.0) as client:
                 # Get the Instagram Business Account ID and page token from platform_data
-                ig_account_id = account.platform_data.get("instagram_business_account_id")
-                page_token = account.platform_data.get("facebook_page_token") or account.access_token
+                ig_account_id = account.platform_data.get(
+                    "instagram_business_account_id"
+                )
+                page_token = (
+                    account.platform_data.get("facebook_page_token")
+                    or account.access_token
+                )
 
                 if not ig_account_id:
                     return {
@@ -364,8 +396,12 @@ async def verify_account_connection(
         elif account.platform == PlatformType.FACEBOOK:
             async with httpx.AsyncClient(timeout=10.0) as client:
                 # Get the Facebook Page ID and page token from platform_data
-                page_id = account.platform_data.get("page_id") or account.platform_user_id
-                page_token = account.platform_data.get("page_token") or account.access_token
+                page_id = (
+                    account.platform_data.get("page_id") or account.platform_user_id
+                )
+                page_token = (
+                    account.platform_data.get("page_token") or account.access_token
+                )
 
                 if not page_id:
                     return {
@@ -554,7 +590,9 @@ async def test_token_connection(
                 expires_at = token_info.get("expires_at", 0)
                 expires_in_days = None
                 if expires_at and expires_at > 0:
-                    expires_in_days = max(0, (expires_at - datetime.now().timestamp()) // 86400)
+                    expires_in_days = max(
+                        0, (expires_at - datetime.now().timestamp()) // 86400
+                    )
 
                 return TokenTestResponse(
                     valid=True,
@@ -602,7 +640,9 @@ async def test_token_connection(
                 expires_at = token_info.get("expires_at", 0)
                 expires_in_days = None
                 if expires_at and expires_at > 0:
-                    expires_in_days = max(0, (expires_at - datetime.now().timestamp()) // 86400)
+                    expires_in_days = max(
+                        0, (expires_at - datetime.now().timestamp()) // 86400
+                    )
 
                 return TokenTestResponse(
                     valid=True,
@@ -713,7 +753,9 @@ async def connect_with_token(
                 token_expires_at = None
                 if expires_at and expires_at > 0:
                     token_expires_at = datetime.fromtimestamp(expires_at)
-                    expires_in_days = max(0, int((expires_at - datetime.now().timestamp()) // 86400))
+                    expires_in_days = max(
+                        0, int((expires_at - datetime.now().timestamp()) // 86400)
+                    )
 
                 # Create social account
                 new_account = SocialAccount(
@@ -782,7 +824,9 @@ async def connect_with_token(
                 token_expires_at = None
                 if expires_at and expires_at > 0:
                     token_expires_at = datetime.fromtimestamp(expires_at)
-                    expires_in_days = max(0, int((expires_at - datetime.now().timestamp()) // 86400))
+                    expires_in_days = max(
+                        0, int((expires_at - datetime.now().timestamp()) // 86400)
+                    )
 
                 # Create social account
                 new_account = SocialAccount(
