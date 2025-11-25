@@ -11,11 +11,11 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 from app.database import Base
 from app.core.config import settings
 
-# Import all models to ensure they are registered with Base
-from app.models.user import User
-from app.models.social_account import SocialAccount
-
-# Import other models as you create them
+# Import all models to ensure they are registered with Base. Importing
+# the `app.models` package will load `user`, `social_account`, `content`,
+# and `post` modules (see `app/models/__init__.py`) so `target_metadata`
+# contains the complete MetaData for autogeneration.
+import app.models  # noqa: F401
 
 # this is the Alembic Config object
 config = context.config
