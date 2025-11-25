@@ -63,10 +63,11 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS Middleware
+
+# CORS Middleware: read origins from settings; fall back to allow-all if empty
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=settings.cors_origins_list or ["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -76,43 +77,19 @@ app.add_middleware(
 # Request logging middleware
 class RequestLoggingMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
-        print(f"\n{'='*80}")
-        print(f"[REQUEST] {request.method} {request.url.path}")
-        print(f"[REQUEST] Headers: {dict(request.headers)}")
-
-        # Try to get body for POST requests
-        if request.method == "POST":
-            body = await request.body()
-            print(f"[REQUEST] Body length: {len(body)} bytes")
-            if len(body) < 5000:  # Only print small bodies
-                print(f"[REQUEST] Body preview: {body[:500]}")
+        logger.info("request.start", method=request.method, path=str(request.url.path))
 
         start_time = time.time()
         response = await call_next(request)
         process_time = time.time() - start_time
 
-        print(f"[RESPONSE] Status: {response.status_code}")
-        print(f"[RESPONSE] Time: {process_time:.3f}s")
-
-        # Try to read response body for errors
-        if response.status_code >= 400:
-            # Get response body
-            response_body = b""
-            async for chunk in response.body_iterator:
-                response_body += chunk
-            print(f"[RESPONSE] Error body: {response_body.decode()}")
-
-            # Re-create response with same body
-            from starlette.responses import Response
-
-            response = Response(
-                content=response_body,
-                status_code=response.status_code,
-                headers=dict(response.headers),
-                media_type=response.media_type,
-            )
-
-        print(f"{'='*80}\n")
+        logger.info(
+            "request.finish",
+            method=request.method,
+            path=str(request.url.path),
+            status_code=response.status_code,
+            duration=process_time,
+        )
 
         return response
 
@@ -142,8 +119,8 @@ app.include_router(auth.router, prefix="/api/v1/auth", tags=["Authentication"])
 app.include_router(content.router, prefix="/api/v1/content", tags=["Content"])
 app.include_router(
     social_accounts.router, prefix="/api/v1/social-accounts", tags=["Social Accounts"]
-)  # ADD THIS
-app.include_router(posts.router, prefix="/api/v1/posts", tags=["Posts"])  # ADD THIS
+)
+app.include_router(posts.router, prefix="/api/v1/posts", tags=["Posts"])
 app.include_router(
     oauth_routes.router, prefix="/api/v1/oauth", tags=["OAuth"]
 )  # New OAuth routes

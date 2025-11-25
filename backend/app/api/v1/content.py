@@ -35,6 +35,7 @@ from pydantic import BaseModel
 from app.services.pexels_service import PexelsService
 from app.services.keyword_extractor import KeywordExtractorService
 from app.core.config import settings
+from loguru import logger
 
 router = APIRouter()
 
@@ -660,12 +661,9 @@ async def generate_content(
             detail=f"Failed to generate content: {str(e)}",
         )
 
-    # Add this to backend/app/api/v1/content.py
-
     auto_approve: bool = False
 
 
-# Add this schema at the top with other schemas:
 class PromptSummarizeRequest(BaseModel):
     prompt: str
     max_words: int = 50
@@ -679,7 +677,6 @@ class PromptSummarizeResponse(BaseModel):
     error: Optional[str] = None
 
 
-# Add this endpoint after the other content endpoints:
 @router.post("/summarize-prompt", response_model=PromptSummarizeResponse)
 async def summarize_prompt(
     request: PromptSummarizeRequest,
@@ -690,17 +687,21 @@ async def summarize_prompt(
     Useful for creating concise voiceover scripts.
     """
     try:
-        print(f"[Summarize Prompt] User: {current_user.email}")
-        print(f"[Summarize Prompt] Original prompt length: {len(request.prompt)} chars")
-        print(f"[Summarize Prompt] Target max words: {request.max_words}")
+        logger.info(
+            "Summarize Prompt start",
+            user=current_user.email,
+            original_chars=len(request.prompt),
+            target_words=request.max_words,
+        )
 
         # Count original words
         original_word_count = len(request.prompt.split())
 
         # If already short enough, return as-is
         if original_word_count <= request.max_words:
-            print(
-                f"[Summarize Prompt] Prompt already short enough ({original_word_count} words)"
+            logger.info(
+                "Summarize Prompt skipped - already short enough",
+                original_words=original_word_count,
             )
             return PromptSummarizeResponse(
                 success=True,

@@ -13,13 +13,6 @@ type ToasterToast = ToastProps & {
   action?: ToastActionElement
 }
 
-const actionTypes = {
-  ADD_TOAST: "ADD_TOAST",
-  UPDATE_TOAST: "UPDATE_TOAST",
-  DISMISS_TOAST: "DISMISS_TOAST",
-  REMOVE_TOAST: "REMOVE_TOAST",
-} as const
-
 let count = 0
 
 function genId() {
@@ -27,25 +20,23 @@ function genId() {
   return count.toString()
 }
 
-type ActionType = typeof actionTypes
-
 type Action =
   | {
-      type: ActionType["ADD_TOAST"]
-      toast: ToasterToast
-    }
+    type: "ADD_TOAST"
+    toast: ToasterToast
+  }
   | {
-      type: ActionType["UPDATE_TOAST"]
-      toast: Partial<ToasterToast>
-    }
+    type: "UPDATE_TOAST"
+    toast: Partial<ToasterToast>
+  }
   | {
-      type: ActionType["DISMISS_TOAST"]
-      toastId?: ToasterToast["id"]
-    }
+    type: "DISMISS_TOAST"
+    toastId?: ToasterToast["id"]
+  }
   | {
-      type: ActionType["REMOVE_TOAST"]
-      toastId?: ToasterToast["id"]
-    }
+    type: "REMOVE_TOAST"
+    toastId?: ToasterToast["id"]
+  }
 
 interface State {
   toasts: ToasterToast[]
@@ -101,9 +92,9 @@ export const reducer = (state: State, action: Action): State => {
         toasts: state.toasts.map((t) =>
           t.id === toastId || toastId === undefined
             ? {
-                ...t,
-                open: false,
-              }
+              ...t,
+              open: false,
+            }
             : t
         ),
       }
@@ -136,7 +127,8 @@ function dispatch(action: Action) {
 type Toast = Omit<ToasterToast, "id">
 
 // Helper function to safely convert any value to string
-function safeToString(value: any): string {
+// Helper function to safely convert any value to string
+function safeToString(value: unknown): string {
   if (typeof value === 'string') return value
   if (typeof value === 'number' || typeof value === 'boolean') return String(value)
   if (value === null || value === undefined) return ''
@@ -144,10 +136,11 @@ function safeToString(value: any): string {
     try {
       return JSON.stringify(value)
     } catch {
-      return String(value)
+      // Fallback: coerce to unknown first and stringify
+      return String(value as unknown)
     }
   }
-  return String(value)
+  return String(value as unknown)
 }
 
 function toast({ ...props }: Toast) {

@@ -1,3 +1,34 @@
+FROM python:3.11-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential libpq-dev curl procps gnupg2 \
+    && rm -rf /var/lib/apt/lists/*
+
+# create a non-root user
+RUN useradd --create-home appuser
+
+COPY ./requirements-prod.txt /app/requirements-prod.txt
+RUN pip install --no-cache-dir -r /app/requirements-prod.txt
+
+# Copy application code and alembic config
+COPY ./app /app/app
+COPY ./alembic.ini /app/alembic.ini
+COPY ./alembic /app/alembic
+COPY ./entrypoint.sh /app/entrypoint.sh
+
+RUN chown -R appuser:appuser /app && chmod +x /app/entrypoint.sh
+USER appuser
+
+EXPOSE 8000
+
+ENTRYPOINT ["/app/entrypoint.sh"]
+# Use Gunicorn with Uvicorn workers for production-grade serving
+CMD ["gunicorn", "app.main:app", "-k", "uvicorn.workers.UvicornWorker", "-b", "0.0.0.0:8000", "--workers", "2", "--log-level", "info"]
 # =============================================================================
 # Multi-stage Dockerfile for Social Media Automation Backend
 # =============================================================================
@@ -24,7 +55,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy only requirements first (for better caching)
-COPY requirements-prod.txt requirements.txt ./
+COPY requirements-prod.txt ./
 
 # Install Python dependencies
 RUN pip install --upgrade pip setuptools wheel && \
@@ -45,6 +76,7 @@ WORKDIR /app
 # Install only runtime dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq5 \
+    postgresql-client \
     curl \
     && rm -rf /var/lib/apt/lists/*
 

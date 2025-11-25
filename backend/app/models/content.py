@@ -69,7 +69,7 @@ class Content(Base):
     # Relationships
     # Relationships
     user = relationship("User", back_populates="contents", foreign_keys=[user_id])
-    approver = relationship("User", foreign_keys=[approved_by])  # Add this line
+    approver = relationship("User", foreign_keys=[approved_by])
     posts = relationship("Post", back_populates="content", cascade="all, delete-orphan")
 
     def __repr__(self):
